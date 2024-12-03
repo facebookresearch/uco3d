@@ -46,7 +46,7 @@ def build_arg_parser(
         type=lambda x: [x_.strip() for x_ in x.split(",")],
         default=None,
         help=f"A comma-separated list of {dataset_name} categories to download."
-        + " Example: 'orange,car' will download only oranges and cars",
+        + " Example: 'kettle,shampoo' will download only kettles and shampoos",
     )
     parser.add_argument(
         "--download_super_categories",
@@ -54,7 +54,8 @@ def build_arg_parser(
         default=None,
         help=f"A comma-separated list of {dataset_name} sub categories to download."
         + " If a super-category is specified, all its categories will be downloaded."
-        + " Example: 'vehicle,animal' will download only vehicle and animal super-categories",
+        + " Example: 'vegetables_and_legumes,stationery' will download only"
+        + " the vegetables&legumes and stationery super-categories",
     )
     parser.add_argument(
         "--download_modalities",
