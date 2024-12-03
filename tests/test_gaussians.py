@@ -46,5 +46,6 @@ class TestGaussians(unittest.TestCase):
             # store splats
             save_gsplat_ply(splats_truncated, outfile)
 
+
 if __name__ == "__main__":
     unittest.main()

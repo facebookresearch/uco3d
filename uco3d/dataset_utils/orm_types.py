@@ -127,9 +127,13 @@ class UCO3DSequenceAnnotation(Base):
         mapped_column("_reconstruction_quality_gaussian_splats_psnr", nullable=True),
         mapped_column("_reconstruction_quality_gaussian_splats_ssim", nullable=True),
         mapped_column("_reconstruction_quality_gaussian_splats_lpips", nullable=True),
-        mapped_column("_reconstruction_quality_sfm_n_registered_cameras", nullable=True),
+        mapped_column(
+            "_reconstruction_quality_sfm_n_registered_cameras", nullable=True
+        ),
         mapped_column("_reconstruction_quality_sfm_mean_track_length", nullable=True),
-        mapped_column("_reconstruction_quality_sfm_bundle_adjustment_final_cost", nullable=True),
+        mapped_column(
+            "_reconstruction_quality_sfm_bundle_adjustment_final_cost", nullable=True
+        ),
     )
 
     # captions

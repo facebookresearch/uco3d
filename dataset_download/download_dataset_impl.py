@@ -70,7 +70,7 @@ def download_dataset(
             "Please specify `link_list_file` with a valid path to a json"
             " with zip file download links."
         )
-    
+
     if not os.path.isdir(download_folder):
         raise ValueError(
             "Please specify `download_folder` with a valid path to a target folder"
@@ -88,7 +88,7 @@ def download_dataset(
     uco3d_super_categories = set()
     for modality, modality_links in links.items():
         uco3d_modalities.add(modality)
-        if modality=="metadata":
+        if modality == "metadata":
             continue
         for super_category, super_category_links in modality_links.items():
             uco3d_super_categories.add(super_category)
@@ -108,25 +108,27 @@ def download_dataset(
                         f"Invalid choice for '{sel_name}': {sel}. "
                         + f"Possible choices are: {str(possible)}."
                     )
-    
+
     def _is_for_download(modality: str, super_category: str, category: str) -> bool:
         if download_modalities is not None and modality not in download_modalities:
             return False
         if (
-            download_super_categories is not None 
+            download_super_categories is not None
             and super_category in download_super_categories
         ):
             return True
         if download_categories is not None and category not in download_categories:
             return False
         return True
-    
+
     # determine links to files we want to download
     data_links = []
+
     def _add_to_data_links(link: str):
         data_links.append((f"part_{len(data_links):06d}.zip", link))
+
     for modality, modality_links in links.items():
-        if modality=="metadata":
+        if modality == "metadata":
             assert isinstance(modality_links, str)
             _add_to_data_links(modality_links)
             continue
@@ -166,9 +168,7 @@ def download_dataset(
                 + " Please restart the download script."
             )
 
-    print(
-        f"Extracting {len(data_links)} dataset files ..."
-    )
+    print(f"Extracting {len(data_links)} dataset files ...")
     with Pool(processes=n_extract_workers) as extract_pool:
         for _ in tqdm(
             extract_pool.imap(

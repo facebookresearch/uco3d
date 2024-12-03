@@ -140,7 +140,7 @@ class UCO3DFrameDataBuilder:
         *,
         load_blobs: bool = True,
     ) -> UCO3DFrameData:
-        
+
         super_category = sequence_annotation.super_category
         category = sequence_annotation.category
         frame_data = UCO3DFrameData(
@@ -267,11 +267,7 @@ class UCO3DFrameDataBuilder:
 
         # load all possible types of point clouds
         if load_blobs:
-            for pcl_type_str in [
-                "",
-                "sparse_",
-                "segmented_"
-            ]:
+            for pcl_type_str in ["", "sparse_", "segmented_"]:
                 do_load_pcl = getattr(self, f"load_{pcl_type_str}point_clouds")
                 if not do_load_pcl:
                     continue
@@ -320,20 +316,18 @@ class UCO3DFrameDataBuilder:
         assert sequence_annotation.alignment_translation is not None
         R = torch.tensor(sequence_annotation.alignment_rotation, dtype=torch.float32)
         T = torch.tensor(sequence_annotation.alignment_translation, dtype=torch.float32)
-        s = torch.tensor(sequence_annotation.alignment_scale or 1.0, dtype=torch.float32)
+        s = torch.tensor(
+            sequence_annotation.alignment_scale or 1.0, dtype=torch.float32
+        )
 
         camera_before = copy.deepcopy(frame_data.camera)
-        
+
         # align the camera using the align transform
         frame_data.camera.R = R.transpose(-1, -2) @ frame_data.camera.R
         frame_data.camera.T = s * (frame_data.camera.T - T @ frame_data.camera.R)
 
         # align point clouds
-        for pcl_type_str in [
-            "",
-            "sparse_",
-            "segmented_"
-        ]:
+        for pcl_type_str in ["", "sparse_", "segmented_"]:
             pcl_field = f"{pcl_type_str}point_cloud"
             pcl = getattr(frame_data, pcl_field, None)
             if pcl is None:
@@ -344,9 +338,7 @@ class UCO3DFrameDataBuilder:
             pcl.xyz = (pcl.xyz @ R + T) * s
             setattr(frame_data, pcl_field, pcl)
             points_after = torch.nn.functional.normalize(
-                pcl.xyz
-                @ frame_data.camera.R
-                + frame_data.camera.T
+                pcl.xyz @ frame_data.camera.R + frame_data.camera.T
             )
             assert torch.allclose(points_after, points_before, atol=1e-2)
 
@@ -370,10 +362,13 @@ class UCO3DFrameDataBuilder:
             ply_data.elements[0].data[["x", "y", "z"]].tolist(),
             dtype=torch.float32,
         )
-        rgb = torch.tensor(
-            ply_data.elements[0].data[["red", "green", "blue"]].tolist(),
-            dtype=torch.float32,
-        ) / 255.0
+        rgb = (
+            torch.tensor(
+                ply_data.elements[0].data[["red", "green", "blue"]].tolist(),
+                dtype=torch.float32,
+            )
+            / 255.0
+        )
         return PointCloud(xyz, rgb)
 
     # TODO: NOT USED SINCE WE LOAD FRAMES FROM VIDEOS -> consider removing
@@ -416,9 +411,7 @@ class UCO3DFrameDataBuilder:
             depth_video_timestamp,
         )
         if depth_np is None:
-            raise ValueError(
-                f"Cannot load depth frame from {depth_video_path}"
-            )
+            raise ValueError(f"Cannot load depth frame from {depth_video_path}")
         depth_map = torch.from_numpy(depth_np[:1])
         if self.mask_depths:
             assert fg_mask is not None

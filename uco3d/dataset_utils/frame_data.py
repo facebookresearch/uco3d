@@ -98,18 +98,18 @@ class UCO3DFrameData(Mapping[str, Any]):
             corresponding point cloud to `image_rgb[i]`, use
             `sequence_point_cloud[sequence_point_cloud_idx[i]]`.
         sequence_segmented_point_cloud: A Pointcloud object holding the
-            point cloud corresponding to the frame's sequence. 
+            point cloud corresponding to the frame's sequence.
             The segmented point cloud comprises the same as sequence_point_cloud
             with the non-object background points removed.
-        sequence_segmented_point_cloud_path: Same as sequence_point_cloud_path 
+        sequence_segmented_point_cloud_path: Same as sequence_point_cloud_path
             but for segmented point cloud
         sequence_segmented_point_cloud_idx: Same as sequence_point_cloud_idx
             but for segmented point cloud
         sequence_sparse_point_cloud: A Pointcloud object holding the
-            point cloud corresponding to the frame's sequence. 
+            point cloud corresponding to the frame's sequence.
             The sparse point cloud comprises the sparse 3D points that pass
             all geometric consistency checks of the SfM reconstruction method.
-        sequence_sparse_point_cloud_path: Same as sequence_point_cloud_path 
+        sequence_sparse_point_cloud_path: Same as sequence_point_cloud_path
             but for sparse point cloud
         sequence_sparse_point_cloud_idx: Same as sequence_point_cloud_idx
             but for sparse point cloud
@@ -449,7 +449,7 @@ class UCO3DFrameData(Mapping[str, Any]):
 
         elif isinstance(elem, PointCloud):
             return batch
-        
+
         elif isinstance(elem, GaussianSplats):
             return batch
 

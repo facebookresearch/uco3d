@@ -12,7 +12,9 @@ from download_dataset_impl import download_dataset
 
 
 DEFAULT_LINK_LIST_FILE = os.path.join(os.path.dirname(__file__), "links.json")
-DEFAULT_SHA256S_FILE = os.path.join(os.path.dirname(__file__), "links/uco3d_sha256.json")
+DEFAULT_SHA256S_FILE = os.path.join(
+    os.path.dirname(__file__), "links/uco3d_sha256.json"
+)
 
 
 def build_arg_parser(
@@ -65,9 +67,7 @@ def build_arg_parser(
         "--link_list_file",
         type=str,
         default=default_link_list_file,
-        help=(
-            f"The file with html links to the {dataset_name} dataset files."
-        ),
+        help=(f"The file with html links to the {dataset_name} dataset files."),
     )
     parser.add_argument(
         "--sha256_file",

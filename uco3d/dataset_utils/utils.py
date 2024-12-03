@@ -202,7 +202,7 @@ def load_depth(path: str, scale_adjustment: float) -> np.ndarray:
     else:
         raise ValueError('unsupported depth file name "%s"' % path)
 
-    assert len(d.shape)==2
+    assert len(d.shape) == 2
 
     d = d * scale_adjustment
 

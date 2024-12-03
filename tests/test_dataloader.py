@@ -108,10 +108,10 @@ class TestDataloader(unittest.TestCase):
             depth_file_path = os.path.join(
                 depth_map_root,
                 frame_data.sequence_name,
-                os.path.splitext(os.path.split(frame_data.image_path)[-1])[0] + ".npy"
+                os.path.splitext(os.path.split(frame_data.image_path)[-1])[0] + ".npy",
             )
             depth_frame = load_depth(depth_file_path, frame_data.depth_scale_adjustment)
-            depth_frame = torch.from_numpy(depth_frame)    
+            depth_frame = torch.from_numpy(depth_frame)
             depth_frame_image, _, _ = resize_image(
                 depth_frame,
                 image_height=frame_data_builder_depth.image_height,
@@ -121,7 +121,6 @@ class TestDataloader(unittest.TestCase):
             depth_frame_video = frame_data.depth_map
             assert depth_frame_image.shape == depth_frame_video.shape
             torch.allclose(depth_frame_image, depth_frame_video)
-
 
 
 if __name__ == "__main__":

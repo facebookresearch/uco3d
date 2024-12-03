@@ -32,7 +32,7 @@ def load_compressed_gaussians(compressed_dir: str) -> GaussianSplats:
         meta = json.load(f)
     splats = {}
     n = meta["means"]["shape"][0]
-    assert tuple(meta["sh0"]["shape"])==(n, 1, 3)
+    assert tuple(meta["sh0"]["shape"]) == (n, 1, 3)
     meta["sh0"]["shape"] = (n, 3)  # adjust the sh0 shape to match our convention
     for param_name, param_meta in meta.items():
         decompress_fn = _get_decompress_fn(param_name)
@@ -40,9 +40,9 @@ def load_compressed_gaussians(compressed_dir: str) -> GaussianSplats:
         if param_name == "means":
             param_val = _inverse_log_transform(param_val)
         tgt_shape = meta[param_name]["shape"]
-        assert tgt_shape[0] == n, (
-            f"# gaussians mismatch for {param_name} ({n} vs {tgt_shape[0]})"
-        )
+        assert (
+            tgt_shape[0] == n
+        ), f"# gaussians mismatch for {param_name} ({n} vs {tgt_shape[0]})"
         splats[param_name] = param_val.reshape(tgt_shape)
     return GaussianSplats(**splats)
 

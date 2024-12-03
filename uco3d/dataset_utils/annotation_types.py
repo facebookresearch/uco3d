@@ -163,6 +163,7 @@ class ReconstructionQualityAnnotation:
     # the mean reprojection error of the final SfM solution
     sfm_bundle_adjustment_final_cost: Optional[float] = None
 
+
 @dataclass
 class SequenceAnnotation:
     sequence_name: str

@@ -142,8 +142,10 @@ class UCO3DDataset:  # pyre-ignore
         if not self.sqlite_metadata_file:
             raise ValueError("sqlite_metadata_file must be set")
         if not os.path.exists(self.sqlite_metadata_file):
-            raise FileNotFoundError(f"sqlite_metadata_file {self.sqlite_metadata_file} not found")
-        
+            raise FileNotFoundError(
+                f"sqlite_metadata_file {self.sqlite_metadata_file} not found"
+            )
+
         # pyre-ignore  # NOTE: sqlite-specific args (read-only mode).
         self._sql_engine_stored = None
         if self.store_sql_engine:
@@ -222,7 +224,7 @@ class UCO3DDataset:  # pyre-ignore
             return engine
         else:
             return self._sql_engine_stored
-    
+
     @dataclass
     class _MetadataAccessor:
         dataset: "UCO3DDataset"
@@ -236,11 +238,11 @@ class UCO3DDataset:  # pyre-ignore
         load_blobs: bool = True,
     ) -> UCO3DFrameData:
         start_time = time.time()
-        
+
         if self.store_sql_engine:
             # trigger the engine creation and storage on the first get_item call
             self._sql_engine_stored = self._sql_engine
-        
+
         if self.frame_data_builder is None:
             raise ValueError(
                 "self.frame_data_builder must be set to enable data fetching."

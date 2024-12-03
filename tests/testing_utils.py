@@ -17,12 +17,9 @@ def get_all_load_dataset(
 ):
     dataset_root = os.getenv(
         "UCO3D_DATASET_ROOT",
-        "/fsx-repligen/shared/datasets/uCO3D/batch_reconstruction/dataset_export/"
+        "/fsx-repligen/shared/datasets/uCO3D/batch_reconstruction/dataset_export/",
     )
-    metadata_file = os.path.join(
-        dataset_root,
-        "metadata_vgg_1128_test15.sqlite"
-    )
+    metadata_file = os.path.join(dataset_root, "metadata_vgg_1128_test15.sqlite")
     setlists_file = os.path.join(
         dataset_root,
         "set_lists_allcat_val1100.sqlite",
