@@ -27,60 +27,24 @@ from uco3d.uco3d_frame_data_builder import UCO3DFrameDataBuilder
 from uco3d.dataset_utils.scene_batch_sampler import SceneBatchSampler
 from uco3d.dataset_utils.utils import load_depth, load_depth_mask, resize_image
 
-
+from testing_utils import get_all_load_dataset
 
 
 class TestDataloader(unittest.TestCase):
     def setUp(self):
-        # TODO: replace with a path that can be set with env variable
-        self.dataset_root = os.getenv(
-            "UCO3D_DATASET_ROOT",
-            "/fsx-repligen/shared/datasets/uCO3D/batch_reconstruction/dataset_export/"
-        )
-        self.metadata_file = os.path.join(
-            self.dataset_root,
-            "metadata_vgg_1128_test15.sqlite"
-        )
-        self.setlists_file = os.path.join(
-            self.dataset_root,
-            "set_lists_allcat_val1100.sqlite",
-        )
+        self.dataset = get_all_load_dataset()
+        self.dataset_root = self.dataset.dataset_root
+        self.setlists_file = self.dataset.setlists_file
+        self.metadata_file = self.dataset.metadata_file
 
-        frame_data_builder = UCO3DFrameDataBuilder(
-            dataset_root=self.dataset_root,
-            apply_alignment=True,
-            load_images=True,
-            load_depths=True,
-            load_masks=True,
-            load_depth_masks=True,
-            load_gaussian_splats=True,
-            gaussian_splats_truncate_background=True,
-            load_point_clouds=True,
-            load_segmented_point_clouds=True,
-            load_sparse_point_clouds=True,
-            box_crop=True,
-            load_frames_from_videos=True,
-            image_height=800,
-            image_width=800,
-            undistort_loaded_blobs=True,
-        )
-        dataset = UCO3DDataset(
-            dataset_root=self.dataset_root,
-            sqlite_metadata_file=self.metadata_file,
-            subset_lists_file=self.setlists_file,
-            subsets=["train"],
-            frame_data_builder=frame_data_builder,
-        )
-        self.dataset = dataset
-
-    def _test_iterate_dataset(self):
+    def test_iterate_dataset(self):
         dataset = self.dataset
         load_idx = [random.randint(0, len(dataset)) for _ in range(10)]
         for i in load_idx:
             entry = dataset[i]
             pass
 
-    def _test_iterate_dataloader(self):
+    def test_iterate_dataloader(self):
         dataset = self.dataset
         dataloader = DataLoader(
             dataset,
@@ -92,7 +56,7 @@ class TestDataloader(unittest.TestCase):
             if i > 10:
                 break
 
-    def _test_iterate_scene_batch_sampler(self):
+    def test_iterate_scene_batch_sampler(self):
         warnings.warn("This is super slow, why??")
         dataset = self.dataset
         scene_batch_sampler = SceneBatchSampler(

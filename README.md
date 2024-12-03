@@ -1,15 +1,15 @@
 # 🔁 uCO3D Dataset
 
-uCO3D is a dataset of around 186000 videos of diverse objects.
-Each scene is about 5 minutes long and filmed with 12 cameras, static and dynamic.
+uCO3D is a dataset of around 170,000 turn-tabe videos capturing objects from 
+the LVIS taxonomy of object categories.
 
 This repository contains download scripts and classes to access the data.
-Examples of usage and format description are coming soon.
 
 ## Download
 
-The full dataset (processed version) takes **244 GB of space**. We distribute it in chunks up to 20 GB.
-The links to all dataset files are present in this repository in [links/links.json](links/links.json).
+The full dataset (processed version) takes **XXX GB of space**. We distribute it in chunks up to 20 GB.
+The links to all dataset files are present in this repository 
+in [dataset_download/links/links.json](links/links.json).
 We provide an automated way of downloading and decompressing the data.
 
 First, run the install script that will take care of dependencies:

@@ -29,14 +29,14 @@ def download_dataset(
     n_extract_workers: int = 4,
     download_categories: Optional[List[str]] = None,
     download_sub_categories: Optional[List[str]] = None,
+    download_modalities: Optional[List[str]] = None,
     checksum_check: bool = False,
-    single_sequence_subset: bool = False,
     clear_archives_after_unpacking: bool = False,
     skip_downloaded_archives: bool = True,
     sha256s_file: Optional[str] = None,
 ):
     """
-    Downloads and unpacks the dataset in CO3D format.
+    Downloads and unpacks the dataset in UCO3D format.
 
     Note: The script will make a folder `<download_folder>/_in_progress`, which
         stores files whose download is in progress. The folder can be safely deleted
@@ -56,10 +56,10 @@ def download_dataset(
             If `None`, downloads all.
         download_sub_categories: A list of categories to download.
             If `None`, downloads all.
+        download_modalities: A list of modalities to download.
+            If `None`, downloads all.
         checksum_check: Enable validation of the downloaded file's checksum before
             extraction.
-        single_sequence_subset: Whether the downloaded dataset is the single-sequence
-            subset of the full dataset.
         clear_archives_after_unpacking: Delete the unnecessary downloaded archive files
             after unpacking.
         skip_downloaded_archives: Skip re-downloading already downloaded archives.
@@ -92,10 +92,6 @@ def download_dataset(
             + f" {download_folder} does not exist."
         )
 
-    # read the link file
-    # with open(link_list_file, "r") as f:
-    #     links = json.load(f)
-
     # read the category map file
     with open(category_map_file, "r") as f:
         category_map = json.load(f)
@@ -103,22 +99,10 @@ def download_dataset(
     with open(sub_category_map_file, "r") as f:
         sub_category_map = json.load(f)
 
-    # get the full dataset links or the single-sequence subset links
-    # links = links["singlesequence"] if single_sequence_subset else links["full"]
-
     # split to data links and the links containing json metadata
     metadata_links = []
     data_links = []
-    # for category_name, urls in links.items():
-    #     for url in urls:
-    #         link_name = os.path.split(url)[-1]
-    #         if single_sequence_subset:
-    #             link_name = link_name.replace("_singlesequence", "")
-    #         if category_name.upper() == "METADATA":
-    #             metadata_links.append((link_name, url))
-    #         else:
-    #             data_links.append((category_name, link_name, url))
-
+    
     for category_name, urls in category_map.items():
         for url in urls:
             link_name = os.path.split(url)[-1]
@@ -130,9 +114,9 @@ def download_dataset(
                 data_links.append((category_name, link_name, url))
 
     if download_categories is not None:
-        co3d_categories = set(l[0] for l in data_links)
-        not_in_co3d = [c for c in download_categories if c not in co3d_categories]
-        if len(not_in_co3d) > 0:
+        uco3d_categories = set(l[0] for l in data_links)
+        not_in_uco3d = [c for c in download_categories if c not in uco3d_categories]
+        if len(not_in_uco3d) > 0:
             raise ValueError(
                 f"download_categories {str(not_in_co3d)} are not valid"
                 + "dataset categories."
@@ -144,19 +128,17 @@ def download_dataset(
     for sub_category_name, urls in sub_category_map.items():
         for url in urls:
             link_name = os.path.split(url)[-1]
-            if single_sequence_subset:
-                link_name = link_name.replace("_singlesequence", "")
             if category_name.upper() == "METADATA":
                 sub_category_metadata_links.append((link_name, url))
             else:
                 sub_category_data_links.append((sub_category_name, link_name, url))
 
     if download_sub_categories is not None:
-        co3d_sub_categories = set(l[0] for l in sub_category_data_links)
-        subcategories_not_in_co3d = [
-            c for c in download_sub_categories if c not in co3d_sub_categories
+        uco3d_sub_categories = set(l[0] for l in sub_category_data_links)
+        subcategories_not_in_uco3d = [
+            c for c in download_sub_categories if c not in uco3d_sub_categories
         ]
-        if len(subcategories_not_in_co3d) > 0:
+        if len(subcategories_not_in_uco3d) > 0:
             raise ValueError(
                 f"download_sub_categories {str(not_in_co3d)} are not valid"
                 + "dataset sub categories."
@@ -166,6 +148,9 @@ def download_dataset(
             for c, ln, l in sub_category_data_links
             if c in download_sub_categories
         ]
+
+    if download_modalities is not None:
+        raise NotImplementedError("Not yet implemented")
 
     with Pool(processes=n_download_workers) as download_pool:
         print(f"Downloading {len(metadata_links)} dataset metadata files ...")
@@ -267,6 +252,13 @@ def build_arg_parser(
         default=None,
         help=f"A comma-separated list of {dataset_name} sub categories to download."
         + " Example: 'orange,car' will download only oranges and cars",
+    )
+    parser.add_argument(
+        "--download_modalities",
+        type=lambda x: [x_.strip() for x_ in x.split(",")],
+        default=None,
+        help=f"A comma-separated list of {dataset_name} modalities to download."
+        + " Example: 'depth,rgb' will download only depth and rgb videos",
     )
     parser.add_argument(
         "--category_map_file",
