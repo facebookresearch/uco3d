@@ -6,14 +6,10 @@
 
 
 import os
-import glob
-import argparse
 import hashlib
 import json
 
 from typing import Optional
-from multiprocessing import Pool
-from tqdm import tqdm
 
 
 BLOCKSIZE = 65536
@@ -29,15 +25,11 @@ def check_uco3d_sha256(
     path: str,
     sha256s_file: str,
     expected_sha256s: Optional[dict] = None,
-    single_sequence_subset: bool = False,
     do_assertion: bool = True,
 ):
     zipname = os.path.split(path)[-1]
     if expected_sha256s is None:
-        expected_sha256s = get_expected_sha256s(
-            sha256s_file=sha256s_file,
-            single_sequence_subset=single_sequence_subset,
-        )
+        expected_sha256s = get_expected_sha256s(sha256s_file=sha256s_file)
     extracted_hash = sha256_file(path)
     if do_assertion:
         assert (
