@@ -22,16 +22,10 @@ DEFAULT_SUB_CATEGORY_LIST_FILE = os.path.join(
 if __name__ == "__main__":
     # parser = build_arg_parser("CO3D", DEFAULT_LINK_LIST_FILE, DEFAULT_SHA256S_FILE)
     parser = build_arg_parser(
-        "CO3D",
+        "uCO3D",
         DEFAULT_CATEGORY_LIST_FILE,
         DEFAULT_SUB_CATEGORY_LIST_FILE,
         DEFAULT_SHA256S_FILE,
-    )
-    parser.add_argument(
-        "--single_sequence_subset",
-        action="store_true",
-        default=False,
-        help="Download the single-sequence subset of the dataset.",
     )
     args = parser.parse_args()
     print("Checksum check is ", args.checksum_check)
@@ -47,7 +41,6 @@ if __name__ == "__main__":
         download_sub_categories=args.download_sub_categories,
         download_modalities=args.download_modalities,
         checksum_check=bool(args.checksum_check),
-        single_sequence_subset=bool(args.single_sequence_subset),
         clear_archives_after_unpacking=bool(args.clear_archives_after_unpacking),
         sha256s_file=str(args.sha256_file),
         skip_downloaded_archives=not bool(args.redownload_existing_archives),

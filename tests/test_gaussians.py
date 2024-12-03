@@ -6,7 +6,6 @@
 
 
 import os
-import torch
 import random
 import unittest
 import dataclasses
@@ -25,7 +24,7 @@ class TestGaussians(unittest.TestCase):
     def test_store_gaussians(self):
         outdir = os.path.join(os.path.dirname(__file__), "test_outputs")
         os.makedirs(outdir, exist_ok=True)
-        dataset = self.dataset        
+        dataset = self.dataset
         forked_random = random.Random(42)
         load_idx = [forked_random.randint(0, len(dataset)) for _ in range(3)]
         for i in load_idx:

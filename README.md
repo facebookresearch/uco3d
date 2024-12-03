@@ -21,7 +21,7 @@ pip install -e .
 Then run the script (make sure to change `<DESTINATION_FOLDER>`):
 
 ```
-replay_dataset/download_dataset.py --download_folder <DESTINATION_FOLDER> --checksum_check
+python dataset_download/download_dataset.py --download_folder <DESTINATION_FOLDER> --checksum_check
 ```
 
 The script has multiple parameters, e.g. `--download_categories audio,videos,masks` will download all modalities (the default behaviour).

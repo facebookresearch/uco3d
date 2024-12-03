@@ -17,18 +17,16 @@ from typing import List, Optional
 from multiprocessing import Pool
 from tqdm import tqdm
 
-from check_checksum import check_co3d_sha256
+from check_checksum import check_uco3d_sha256
 
 
 def download_dataset(
-    # link_list_file: str,
-    category_map_file: str,
-    sub_category_map_file: str,
+    link_list_file: str,
     download_folder: str,
     n_download_workers: int = 4,
     n_extract_workers: int = 4,
+    download_super_categories: Optional[List[str]] = None,
     download_categories: Optional[List[str]] = None,
-    download_sub_categories: Optional[List[str]] = None,
     download_modalities: Optional[List[str]] = None,
     checksum_check: bool = False,
     clear_archives_after_unpacking: bool = False,
@@ -43,18 +41,16 @@ def download_dataset(
         the download is finished.
 
     Args:
-        # link_list_file: A text file with the list of zip file download links.
-        category_map_file: A text file with the list of zip file download links per category.
-        sub_category_map_file: A text file with the list of zip file download links per sub category.
+        link_list_file: A text file with the list of zip file download links.
         download_folder: A local target folder for downloading the
             the dataset files.
         n_download_workers: The number of parallel workers
             for downloading the dataset files.
         n_extract_workers: The number of parallel workers
             for extracting the dataset files.
-        download_categories: A list of categories to download.
+        download_super_categories: A list of super categories to download.
             If `None`, downloads all.
-        download_sub_categories: A list of categories to download.
+        download_categories: A list of categories to download.
             If `None`, downloads all.
         download_modalities: A list of modalities to download.
             If `None`, downloads all.
@@ -70,21 +66,12 @@ def download_dataset(
             "checksum_check is requested but ground-truth SHA256 file not provided!"
         )
 
-    if not os.path.isfile(category_map_file):
+    if not os.path.isfile(link_list_file):
         raise ValueError(
-            "Please specify `category_map_file` with a valid path to a json"
+            "Please specify `link_list_file` with a valid path to a json"
             " with zip file download links."
-            " For CO3Dv2, the file is stored in the co3d github:"
-            " https://github.com/facebookresearch/co3d/blob/main/co3d/links.json"
         )
-    if not os.path.isfile(sub_category_map_file):
-        raise ValueError(
-            "Please specify `sub_category_map_file` with a valid path to a json"
-            " with zip file download links."
-            " For CO3Dv2, the file is stored in the co3d github:"
-            " https://github.com/facebookresearch/co3d/blob/main/co3d/links.json"
-        )
-
+    
     if not os.path.isdir(download_folder):
         raise ValueError(
             "Please specify `download_folder` with a valid path to a target folder"
@@ -92,86 +79,74 @@ def download_dataset(
             + f" {download_folder} does not exist."
         )
 
-    # read the category map file
-    with open(category_map_file, "r") as f:
-        category_map = json.load(f)
+    # read the links file
+    with open(link_list_file, "r") as f:
+        links = json.load(f)
 
-    with open(sub_category_map_file, "r") as f:
-        sub_category_map = json.load(f)
+    # extract plausible modalities, categories, super categories
+    uco3d_modalities = set()
+    uco3d_categories = set()
+    uco3d_super_categories = set()
+    for modality, modality_links in links.items():
+        uco3d_modalities.add(modality)
+        if modality=="metadata":
+            continue
+        for super_category, super_category_links in modality_links.items():
+            uco3d_super_categories.add(super_category)
+            for category, _ in super_category_links.items():
+                uco3d_categories.add(category)
 
-    # split to data links and the links containing json metadata
-    metadata_links = []
-    data_links = []
+    # check if the requested categories, super_categories, or modalities are valid
+    for sel_name, download_sel, possible in zip(
+        ("super_category", "category", "modality"),
+        (download_super_categories, download_categories, download_modalities),
+        (uco3d_super_categories, uco3d_categories, uco3d_modalities),
+    ):
+        if download_sel is not None:
+            for sel in download_sel:
+                if sel not in possible:
+                    raise ValueError(
+                        f"Invalid choice for '{sel_name}': {sel}. "
+                        + f"Possible choices are: {str(possible)}."
+                    )
     
-    for category_name, urls in category_map.items():
-        for url in urls:
-            link_name = os.path.split(url)[-1]
-            if single_sequence_subset:
-                link_name = link_name.replace("_singlesequence", "")
-            if category_name.upper() == "METADATA":
-                metadata_links.append((link_name, url))
-            else:
-                data_links.append((category_name, link_name, url))
-
-    if download_categories is not None:
-        uco3d_categories = set(l[0] for l in data_links)
-        not_in_uco3d = [c for c in download_categories if c not in uco3d_categories]
-        if len(not_in_uco3d) > 0:
-            raise ValueError(
-                f"download_categories {str(not_in_co3d)} are not valid"
-                + "dataset categories."
-            )
-        data_links = [(c, ln, l) for c, ln, l in data_links if c in download_categories]
-
-    sub_category_metadata_links = []
-    sub_category_data_links = []
-    for sub_category_name, urls in sub_category_map.items():
-        for url in urls:
-            link_name = os.path.split(url)[-1]
-            if category_name.upper() == "METADATA":
-                sub_category_metadata_links.append((link_name, url))
-            else:
-                sub_category_data_links.append((sub_category_name, link_name, url))
-
-    if download_sub_categories is not None:
-        uco3d_sub_categories = set(l[0] for l in sub_category_data_links)
-        subcategories_not_in_uco3d = [
-            c for c in download_sub_categories if c not in uco3d_sub_categories
-        ]
-        if len(subcategories_not_in_uco3d) > 0:
-            raise ValueError(
-                f"download_sub_categories {str(not_in_co3d)} are not valid"
-                + "dataset sub categories."
-            )
-        sub_category_data_links = [
-            (c, ln, l)
-            for c, ln, l in sub_category_data_links
-            if c in download_sub_categories
-        ]
-
-    if download_modalities is not None:
-        raise NotImplementedError("Not yet implemented")
-
-    with Pool(processes=n_download_workers) as download_pool:
-        print(f"Downloading {len(metadata_links)} dataset metadata files ...")
-        for _ in tqdm(
-            download_pool.imap(
-                functools.partial(_download_metadata_file, download_folder),
-                metadata_links,
-            ),
-            total=len(metadata_links),
+    def _is_for_download(modality: str, super_category: str, category: str) -> bool:
+        if download_modalities is not None and modality not in download_modalities:
+            return False
+        if (
+            download_super_categories is not None 
+            and super_category in download_super_categories
         ):
-            pass
+            return True
+        if download_categories is not None and category not in download_categories:
+            return False
+        return True
+    
+    # determine links to files we want to download
+    data_links = []
+    def _add_to_data_links(link: str):
+        data_links.append((f"part_{len(data_links):06d}.zip", link))
+    for modality, modality_links in links.items():
+        if modality=="metadata":
+            assert isinstance(modality_links, str)
+            _add_to_data_links(modality_links)
+            continue
+        for super_category, super_category_links in modality_links.items():
+            for category, category_links in super_category_links.items():
+                if _is_for_download(modality, super_category, category):
+                    for l in category_links:
+                        _add_to_data_links(l)
 
+    # multiprocessing pool
+    with Pool(processes=n_download_workers) as download_pool:
         print(f"Downloading {len(data_links)} dataset files ...")
         download_ok = {}
         for link_name, ok in tqdm(
             download_pool.imap(
                 functools.partial(
-                    _download_category_file,
+                    _download_file,
                     download_folder,
                     checksum_check,
-                    single_sequence_subset,
                     sha256s_file,
                     skip_downloaded_archives,
                 ),
@@ -192,21 +167,20 @@ def download_dataset(
                 + " Please restart the download script."
             )
 
-    metadata_links = [ml for ml in metadata_links if ml[1].endswith(".zip")]
     print(
-        f"Extracting {len(data_links)} dataset files and {len(metadata_links)} metadata files..."
+        f"Extracting {len(data_links)} dataset files ..."
     )
     with Pool(processes=n_extract_workers) as extract_pool:
         for _ in tqdm(
             extract_pool.imap(
                 functools.partial(
-                    _unpack_category_file,
+                    _unpack_file,
                     download_folder,
                     clear_archives_after_unpacking,
                 ),
-                metadata_links + data_links,
+                data_links,
             ),
-            total=len(metadata_links) + len(data_links),
+            total=len(data_links),
         ):
             pass
 
@@ -317,12 +291,12 @@ def build_arg_parser(
     return parser
 
 
-def _unpack_category_file(
+def _unpack_file(
     download_folder: str,
     clear_archive: bool,
     link: str,
 ):
-    *_, link_name, url = link
+    link_name, _ = link
     local_fl = os.path.join(download_folder, link_name)
     print(f"Unpacking dataset file {local_fl} ({link_name}) to {download_folder}.")
     shutil.unpack_archive(local_fl, download_folder)
@@ -330,15 +304,14 @@ def _unpack_category_file(
         os.remove(local_fl)
 
 
-def _download_category_file(
+def _download_file(
     download_folder: str,
     checksum_check: bool,
-    single_sequence_subset: bool,
     sha256s_file: Optional[str],
     skip_downloaded_files: bool,
     link: str,
 ):
-    category, link_name, url = link
+    link_name, url = link
     local_fl_final = os.path.join(download_folder, link_name)
 
     if skip_downloaded_files and os.path.isfile(local_fl_final):
@@ -354,10 +327,9 @@ def _download_category_file(
     if checksum_check:
         print(f"Checking SHA256 for {local_fl}.")
         try:
-            check_co3d_sha256(
+            check_uco3d_sha256(
                 local_fl,
                 sha256s_file=sha256s_file,
-                single_sequence_subset=single_sequence_subset,
             )
         except AssertionError:
             warnings.warn(
@@ -371,51 +343,23 @@ def _download_category_file(
     return link_name, True
 
 
-def _download_metadata_file(download_folder: str, link: str):
-    local_fl = os.path.join(download_folder, link[0])
-    # remove the singlesequence postfix in case we are downloading the s.s. subset
-    local_fl = local_fl.replace("_singlesequence", "")
-    print(f"Downloading dataset metadata file {link[1]} ({link[0]}) to {local_fl}.")
-    _download_with_progress_bar(link[1], local_fl, link[0])
-
-
 def _download_with_progress_bar(url: str, fname: str, filename: str):
-    # TODO: replace this!
-    if os.path.exists(url):
-        # Copy file from local path with progress bar
-        # print(f"Copying {filename} from local path: {url}")
-        # shutil.copy(url, fname)
-        s3 = boto3.client("s3")
-        print(f"piyusht1/zip_files/{os.path.split(url)[-1]}")
-        s3.download_file(
-            "genai-project-repligen-archive",
-            f"piyusht1/{os.path.split(url)[-1]}",
-            fname,
-        )
-    elif "genai-project-repligen-archive" in url:
-        s3 = boto3.client("s3")
-        s3.download_file(
-            "genai-project-repligen-archive",
-            f"piyusht1/{os.path.split(url)[-1]}",
-            fname,
-        )
-    else:
-        # taken from https://stackoverflow.com/a/62113293/986477
-        resp = requests.get(url, stream=True)
-        print(url)
-        total = int(resp.headers.get("content-length", 0))
-        with open(fname, "wb") as file, tqdm(
-            desc=fname,
-            total=total,
-            unit="iB",
-            unit_scale=True,
-            unit_divisor=1024,
-        ) as bar:
-            for datai, data in enumerate(resp.iter_content(chunk_size=1024)):
-                size = file.write(data)
-                bar.update(size)
-                if datai % max((max(total // 1024, 1) // 20), 1) == 0:
-                    print(
-                        f"{filename}: Downloaded {100.0*(float(bar.n)/max(total, 1)):3.1f}%."
-                    )
-                    print(bar)
+    # taken from https://stackoverflow.com/a/62113293/986477
+    resp = requests.get(url, stream=True)
+    print(url)
+    total = int(resp.headers.get("content-length", 0))
+    with open(fname, "wb") as file, tqdm(
+        desc=fname,
+        total=total,
+        unit="iB",
+        unit_scale=True,
+        unit_divisor=1024,
+    ) as bar:
+        for datai, data in enumerate(resp.iter_content(chunk_size=1024)):
+            size = file.write(data)
+            bar.update(size)
+            if datai % max((max(total // 1024, 1) // 20), 1) == 0:
+                print(
+                    f"{filename}: Downloaded {100.0*(float(bar.n)/max(total, 1)):3.1f}%."
+                )
+                print(bar)
