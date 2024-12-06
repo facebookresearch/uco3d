@@ -7,7 +7,6 @@
 
 import os
 import warnings
-import argparse
 import torch
 import random
 import unittest
@@ -17,15 +16,11 @@ import unittest
 torch.multiprocessing.set_sharing_strategy("file_system")
 
 from torch.utils.data import DataLoader
-import logging
-
-# logging.basicConfig(level=logging.DEBUG)
-
 
 from uco3d.uco3d_dataset import UCO3DDataset
 from uco3d.uco3d_frame_data_builder import UCO3DFrameDataBuilder
 from uco3d.dataset_utils.scene_batch_sampler import SceneBatchSampler
-from uco3d.dataset_utils.utils import load_depth, load_depth_mask, resize_image
+from uco3d.dataset_utils.utils import load_depth, resize_image
 
 from testing_utils import get_all_load_dataset
 

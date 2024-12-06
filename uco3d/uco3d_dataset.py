@@ -349,6 +349,12 @@ class UCO3DDataset:  # pyre-ignore
         for _, _, idx in self.sequence_frames_in_order(seq_name, subset_filter):
             yield idx
 
+    def sequence_annotations(self) -> pd.DataFrame:
+        """Returns a DataFrame with all sequence annotations."""
+        stmt = sa.select(UCO3DSequenceAnnotation)
+        with self._sql_engine.connect() as connection:
+            return pd.read_sql(stmt, connection)
+
     def sequence_names(self) -> Iterable[str]:
         """Returns an iterator over sequence names in the dataset."""
         return self._index.index.unique("sequence_name")
