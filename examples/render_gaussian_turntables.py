@@ -16,6 +16,7 @@ import torch
 import torchvision
 
 from uco3d import GaussianSplats, UCO3DDataset, UCO3DFrameDataBuilder
+from uco3d.dataset_utils.gauss_3d_rendering import render_splats
 
 try:
     from gsplat import rasterization
@@ -105,7 +106,7 @@ def _render_gaussians(
     camera_matrices = camera_matrix[None].repeat(n_frames, 1, 1)
 
     # render the splats
-    renders, _, _ = _render_splats(
+    renders, _, _ = render_splats(
         viewmats,
         camera_matrices,
         splats_truncated,
@@ -155,7 +156,7 @@ def _viewmatrix(
 
 def _generate_circular_path(
     n_frames: int = 120,
-    focal: float = 1.0,
+    focal_ndc: float = 2.0,
     height: float = 7.0,
     radius: float = 10.0,
     up=np.array([0, -1, 0]),
@@ -170,8 +171,8 @@ def _generate_circular_path(
     render_poses = np.stack(render_poses, axis=0)
     K = np.array(
         [
-            [focal, 0, 0.5],
-            [0, focal, 0.5],
+            [focal_ndc, 0, 0],
+            [0, focal_ndc, 0],
             [0, 0, 1],
         ]
     )
@@ -179,80 +180,6 @@ def _generate_circular_path(
         torch.from_numpy(K).float(),
         torch.from_numpy(render_poses).float().inverse(),
     )
-
-
-@torch.no_grad()
-def _render_splats(
-    viewmats: np.ndarray,
-    camera_matrix: np.ndarray,
-    splats: GaussianSplats,
-    render_size: Tuple[int, int],
-    device: str = "cuda:0",
-    near_plane: float = 1.0,
-    **kwargs,
-):
-
-    height, width = render_size
-    n_cams = viewmats.shape[0]
-    device = torch.device(device)
-
-    # move splats to the device
-    splats = dataclasses.asdict(splats)
-    for k, v in splats.items():
-        if torch.is_tensor(v):
-            splats[k] = v.to(device, dtype=torch.float32)
-
-    # parse splats
-    N = splats["means"].shape[0]
-    means = splats["means"]  # [N, 3]
-    quats = splats["quats"]  # [N, 4]
-    scales = torch.exp(splats["scales"])  # [N, 3]
-    opacities = torch.sigmoid(splats["opacities"].flatten())  # [N,]
-    colors = torch.cat(
-        [
-            splats["sh0"][:, None],
-            splats.get("shN", torch.empty([N, 0, 3], device=device)),
-        ],
-        1,
-    )  # [N, K, 3]
-
-    sh_degree = math.log2(colors.shape[1]) - 1
-    assert sh_degree.is_integer()
-    sh_degree = int(sh_degree)
-
-    # convert ndc camera matrix to pixel camera matrix
-    camera_matrix_pix = torch.tensor(
-        [
-            [width, 0, 1],
-            [0, height, 1],
-            [0, 0, 1],
-        ],
-        dtype=torch.float32,
-        device=device,
-    )[None] @ camera_matrix.to(device, dtype=torch.float32)
-
-    render_colors, render_alphas, info = rasterization(
-        means=means,
-        quats=quats,
-        scales=scales,
-        opacities=opacities,
-        colors=colors,
-        viewmats=viewmats.to(device=device),  # [C, 4, 4]
-        Ks=camera_matrix_pix,  # [C, 3, 3]
-        width=width,
-        height=height,
-        packed=False,
-        absgrad=False,
-        sparse_grad=False,
-        rasterize_mode="classic",
-        distributed=False,
-        sh_degree=sh_degree,
-        near_plane=near_plane,
-        backgrounds=torch.ones(n_cams, 3, dtype=torch.float32, device=device),
-        **kwargs,
-    )
-
-    return render_colors.clamp(0, 1), render_alphas, info
 
 
 def _get_dataset() -> UCO3DDataset:
