@@ -14,3 +14,5 @@ mkdir /home/dnovotny/data/
 cd /home/dnovotny/data/
 manifold get coreai_3d/tree/fsx-repligen/dnovotny/datasets/uco3d_sample.zip
 unzip uco3d_sample.zip
+cd uco3d_sample
+ln -s ./metadata_vgg_1128_test15.sqlite ./metadata.sqlite

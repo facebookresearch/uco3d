@@ -5,23 +5,25 @@
 # LICENSE file in the root directory of this source tree.
 
 
-import os
-import json
-import dataclasses
-import torch
 import copy
+import dataclasses
+import json
 import math
-import numpy as np
+import os
 import warnings
+
+from typing import Any, Dict
+
+import imageio.v2 as imageio
+import numpy as np
+import torch
+from omegaconf import DictConfig
 from plyfile import PlyData, PlyElement
 from scipy.spatial.transform import Rotation
-from omegaconf import DictConfig
 
-from typing import Dict, Any
-import imageio.v2 as imageio
+from . import gauss3d_convert
 
 from .data_types import GaussianSplats
-from . import gauss3d_convert
 
 
 def load_compressed_gaussians(compressed_dir: str) -> GaussianSplats:
@@ -65,7 +67,7 @@ def save_gsplat_ply(splats: GaussianSplats, path: str):
     """
     Save gsplats to a ply file following the standard gsplat convention.
     """
-    splats = dataclasses.asdict(GaussianSplats)
+    splats = dataclasses.asdict(splats)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     splats = splats.copy()
     xyz = splats["means"].detach().cpu().numpy()

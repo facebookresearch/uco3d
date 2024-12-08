@@ -6,14 +6,14 @@
 
 
 import functools
-import os
 import logging
-import warnings
+import os
 import time
+import warnings
+from dataclasses import dataclass, field
 
 from pathlib import Path
-from typing import List, Optional, Tuple, TypeVar, Union, Callable, Generic
-from dataclasses import field, dataclass
+from typing import Callable, Generic, List, Optional, Tuple, TypeVar, Union
 
 import cv2
 import numpy as np
@@ -23,6 +23,32 @@ from PIL import Image
 from .data_types import Cameras
 
 logger = logging.getLogger(__name__)
+
+UCO3D_DATASET_ROOT_ENV_VAR = "UCO3D_DATASET_ROOT"
+
+
+def get_dataset_root(assert_exists: bool = False) -> str:
+    """
+    Returns the root directory of the UCO3D dataset.
+    If the environment variable stored in UCO3D_DATASET_ROOT_ENV_VAR is set"
+    it will be used. Otherwise, a None is returned.
+
+    Args:
+        assert_exists: If True, the function will raise an error if the
+            dataset root does not exist.
+    """
+    dataset_root = os.getenv(UCO3D_DATASET_ROOT_ENV_VAR, None)
+    if assert_exists:
+        if dataset_root is None:
+            raise ValueError(
+                f"Environment variable {UCO3D_DATASET_ROOT_ENV_VAR} is not set."
+            )
+        if not os.path.exists(dataset_root):
+            raise ValueError(
+                f"Environment variable {UCO3D_DATASET_ROOT_ENV_VAR} points"
+                " to a non-existing path."
+            )
+    return dataset_root
 
 
 def get_bbox_from_mask(

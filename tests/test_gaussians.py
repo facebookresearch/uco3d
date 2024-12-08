@@ -5,11 +5,10 @@
 # LICENSE file in the root directory of this source tree.
 
 
+import dataclasses
 import os
 import random
 import unittest
-import dataclasses
-
 
 from testing_utils import get_all_load_dataset
 from uco3d.dataset_utils.gauss3d_utils import save_gsplat_ply
@@ -33,7 +32,6 @@ class TestGaussians(unittest.TestCase):
                 outdir,
                 f"test_store_gaussians_{entry.sequence_name}.ply",
             )
-            print(outfile)
             # truncate points outside a given spherical boundary:
             centroid = entry.sequence_gaussian_splats.means[
                 entry.sequence_gaussian_splats.fg_mask

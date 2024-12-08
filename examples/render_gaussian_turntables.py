@@ -15,8 +15,11 @@ import numpy as np
 import torch
 import torchvision
 
+from internal.copy_dataset import get_dataset
+
 from uco3d import GaussianSplats, UCO3DDataset, UCO3DFrameDataBuilder
 from uco3d.dataset_utils.gauss_3d_rendering import render_splats
+from uco3d.dataset_utils.utils import get_dataset_root
 
 try:
     from gsplat import rasterization
@@ -183,15 +186,7 @@ def _generate_circular_path(
 
 
 def _get_dataset() -> UCO3DDataset:
-    # dataset_root = os.getenv(  # AWS
-    #     "UCO3D_DATASET_ROOT",
-    #     "/fsx-repligen/shared/datasets/uCO3D/batch_reconstruction/dataset_export/",
-    # )
-    dataset_root = os.getenv(  # MAST
-        "UCO3D_DATASET_ROOT",
-        "/home/dnovotny/data/uco3d_sample/",
-    )
-    metadata_file = os.path.join(dataset_root, "metadata_vgg_1128_test15.sqlite")
+    dataset_root = get_dataset_root(assert_exists=True)
     setlists_file = os.path.join(
         dataset_root,
         "set_lists_allcat_val1100.sqlite",

@@ -10,9 +10,9 @@ import logging
 import os
 import time
 import warnings
+from collections import defaultdict
 
 from dataclasses import dataclass
-from collections import defaultdict
 from typing import (
     Any,
     ClassVar,
@@ -34,9 +34,10 @@ import torch
 
 from sqlalchemy.orm import Session
 
-# TODO: unify
-from .dataset_utils.orm_types import UCO3DFrameAnnotation, UCO3DSequenceAnnotation
 from .dataset_utils.frame_data import UCO3DFrameData
+
+from .dataset_utils.orm_types import UCO3DFrameAnnotation, UCO3DSequenceAnnotation
+from .dataset_utils.utils import get_dataset_root, UCO3D_DATASET_ROOT_ENV_VAR
 from .uco3d_frame_data_builder import UCO3DFrameDataBuilder
 
 logger = logging.getLogger(__name__)
@@ -44,8 +45,12 @@ logger = logging.getLogger(__name__)
 
 _SET_LISTS_TABLE: str = "set_lists"
 
-
-# TODO: unify with UCo3dDataset
+_DEFAULT_DATASET_ROOT: str = get_dataset_root()
+_DEFAULT_SQLITE_METADATA_FILE: str = (
+    os.path.join(_DEFAULT_DATASET_ROOT, "metadata.sqlite")
+    if _DEFAULT_DATASET_ROOT is not None
+    else "<UNKNOWN>"
+)
 
 
 @dataclass
@@ -69,15 +74,14 @@ class UCO3DDataset:  # pyre-ignore
         sqlite_metadata_file: A SQLite file containing frame and sequence annotation
             tables (mapping to UCO3DFrameAnnotation and UCO3DSequenceAnnotation,
             respectively).
-        dataset_root: A root directory to look for images, masks, etc. It can be
-            alternatively set in `frame_data_builder` args, but this takes precedence.
-        subsets: If set, restrict frames/sequences only to the given list of subsets
-            as defined in subset_lists_file (see above). Applied before all other
-            filters.
         subset_lists_file: A JSON/sqlite file containing the lists of frames
             corresponding to different subsets (e.g. train/val/test) of the dataset;
             format: {subset: [(sequence_name, frame_id, file_path)]}. All entries
             must be present in frame_annotation metadata table.
+            If `None`, the whole dataset is loaded.
+        subsets: If set, restrict frames/sequences only to the given list of subsets
+            as defined in subset_lists_file (see above). Applied before all other
+            filters.
         path_manager: a facade for non-POSIX filesystems.
         remove_empty_masks: Removes the frames with no active foreground pixels
             in the segmentation mask (needs frame_annotation.mask.mass to be set;
@@ -105,6 +109,8 @@ class UCO3DDataset:  # pyre-ignore
         remove_empty_masks_poll_whole_table_threshold: If the number of frames in the
             dataset is greater than this threshold, the dataset will use a more
             efficient method to remove frames with empty masks.
+        store_sql_engine: If True, stores the SQL engine in the dataset object. This
+            can however cause pickling issues, so it is not recommended.
     """
 
     frame_annotations_type: ClassVar[Type[UCO3DFrameAnnotation]] = UCO3DFrameAnnotation
@@ -113,13 +119,11 @@ class UCO3DDataset:  # pyre-ignore
     # frame data builder
     frame_data_builder: Optional[UCO3DFrameDataBuilder] = None
 
-    sqlite_metadata_file: str = ""
-    dataset_root: Optional[str] = None
-    subset_lists_file: str = ""
+    sqlite_metadata_file: str = _DEFAULT_SQLITE_METADATA_FILE
+    subset_lists_file: Optional[str] = None
     eval_batches_file: Optional[str] = None
     path_manager: Any = None
     subsets: Optional[List[str]] = None
-    remove_empty_masks: bool = False
     pick_frames_sql_clause: Optional[str] = None
     pick_categories: Tuple[str, ...] = ()
 
@@ -130,6 +134,7 @@ class UCO3DDataset:  # pyre-ignore
     limit_to: int = 0
     n_frames_per_sequence: int = -1
     seed: int = 0
+    remove_empty_masks: bool = False
     remove_empty_masks_poll_whole_table_threshold: int = 300_000
     preload_metadata: bool = False
     store_sql_engine: bool = False
@@ -163,16 +168,16 @@ class UCO3DDataset:  # pyre-ignore
         else:
             if self.subset_lists_file is not None:
                 raise ValueError(
-                    "subset_lists_file is set but subsets is not set. "
+                    "`subset_lists_file` is set but `subsets` is not set. "
                     + "Either provide the self.subsets to load, or "
                     + "set self.subset_lists_file=None."
                 )
             # TODO: if self.subset_lists_file and not self.subsets, it might be faster to
             # still use the concatenated lists, assuming they cover the whole dataset
             warnings.warn(
-                "Loading the whole UCO3D database takes a long time."
-                + " If possible, consider setting self.subsets, and defining a "
-                + " subset_lists_file to speed up the loading process."
+                "Loading the whole uCO3D database takes a long time."
+                + " If possible, consider setting `subsets`, and defining a "
+                + " `subset_lists_file` to speed up the loading process."
             )
             index = self._build_index_from_db(sequences)
 
@@ -354,7 +359,7 @@ class UCO3DDataset:  # pyre-ignore
         stmt = sa.select(UCO3DSequenceAnnotation)
         with self._sql_engine.connect() as connection:
             return pd.read_sql(stmt, connection)
-        
+
     def frame_annotations(self) -> pd.DataFrame:
         """Returns a DataFrame with all frame annotations."""
         stmt = sa.select(UCO3DFrameAnnotation)
@@ -762,10 +767,9 @@ class UCO3DDataset:  # pyre-ignore
 
         if not os.path.isfile(self.eval_batches_file):
             # The batch indices file does not exist.
-            # Most probably the user has not specified the root folder.
-            raise ValueError(
-                f"Looking for dataset json file in {self.eval_batches_file}. "
-                + "Please specify a correct dataset_root folder."
+            raise FileNotFoundError(
+                f"Cannot find eval batches json file in {self.eval_batches_file}."
+                + " Please specify a correct eval_batches_file"
             )
 
         with open(self.eval_batches_file, "r") as f:

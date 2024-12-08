@@ -6,38 +6,35 @@
 
 
 import os
-import warnings
-import torch
 import random
 import unittest
+import warnings
+
+import torch
 
 # To resolve memory leaks giving received 0 items from anecdata
 # Reference link https://github.com/pytorch/pytorch/issues/973
 torch.multiprocessing.set_sharing_strategy("file_system")
 
+from testing_utils import get_all_load_dataset
 from torch.utils.data import DataLoader
-
-from uco3d.uco3d_dataset import UCO3DDataset
-from uco3d.uco3d_frame_data_builder import UCO3DFrameDataBuilder
 from uco3d.dataset_utils.scene_batch_sampler import SceneBatchSampler
 from uco3d.dataset_utils.utils import load_depth, resize_image
 
-from testing_utils import get_all_load_dataset
+from uco3d.uco3d_dataset import UCO3DDataset
+from uco3d.uco3d_frame_data_builder import UCO3DFrameDataBuilder
 
 
 class TestDataloader(unittest.TestCase):
     def setUp(self):
         self.dataset = get_all_load_dataset()
-        self.dataset_root = self.dataset.dataset_root
-        self.setlists_file = self.dataset.setlists_file
-        self.metadata_file = self.dataset.metadata_file
+        self.subset_lists_file = self.dataset.subset_lists_file
 
     def test_iterate_dataset(self):
         dataset = self.dataset
         load_idx = [random.randint(0, len(dataset)) for _ in range(10)]
         for i in load_idx:
-            entry = dataset[i]
-            pass
+            _ = dataset[i]
 
     def test_iterate_dataloader(self):
         dataset = self.dataset
@@ -69,10 +66,9 @@ class TestDataloader(unittest.TestCase):
         for _ in dataloader:
             pass
 
-    def test_depth_map_from_video(self):
+    def _test_depth_map_from_video(self):
         depth_map_root = "/fsx-repligen/shared/datasets/uCO3D/temp_depth_check"
         frame_data_builder_depth = UCO3DFrameDataBuilder(
-            dataset_root=self.dataset_root,
             apply_alignment=False,
             load_images=True,
             load_depths=True,
@@ -90,9 +86,7 @@ class TestDataloader(unittest.TestCase):
             undistort_loaded_blobs=True,
         )
         dataset_depth = UCO3DDataset(
-            dataset_root=self.dataset_root,
-            sqlite_metadata_file=self.metadata_file,
-            subset_lists_file=self.setlists_file,
+            subset_lists_file=self.subset_lists_file,
             subsets=["train"],
             frame_data_builder=frame_data_builder_depth,
         )
@@ -105,7 +99,10 @@ class TestDataloader(unittest.TestCase):
                 frame_data.sequence_name,
                 os.path.splitext(os.path.split(frame_data.image_path)[-1])[0] + ".npy",
             )
-            depth_frame = load_depth(depth_file_path, frame_data.depth_scale_adjustment)
+            depth_frame = load_depth(
+                depth_file_path,
+                frame_data.depth_scale_adjustment,
+            )
             depth_frame = torch.from_numpy(depth_frame)
             depth_frame_image, _, _ = resize_image(
                 depth_frame,

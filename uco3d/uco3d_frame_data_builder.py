@@ -5,14 +5,14 @@
 # LICENSE file in the root directory of this source tree.
 
 
+import copy
 import logging
 import os
 import time
-import warnings
-import copy
-from dataclasses import dataclass, asdict
 import typing
-from typing import Any, Optional, Tuple, Literal
+import warnings
+from dataclasses import asdict, dataclass
+from typing import Any, Literal, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -20,17 +20,8 @@ import torch
 
 from plyfile import PlyData
 
-from .dataset_utils.utils import (
-    get_bbox_from_mask,
-    load_depth,
-    load_depth_mask,
-    load_image,
-    load_mask,
-    safe_as_tensor,
-    transpose_normalize_image,
-    undistort_frame_data_opencv,
-    LruCacheWithCleanup,
-)
+from .dataset_utils.data_types import Cameras, PointCloud
+from .dataset_utils.frame_data import UCO3DFrameData
 
 from .dataset_utils.gauss3d_utils import (
     load_compressed_gaussians,
@@ -38,12 +29,21 @@ from .dataset_utils.gauss3d_utils import (
     truncate_bg_gaussians,
 )
 
-from .dataset_utils.orm_types import (
-    UCO3DFrameAnnotation,
-    UCO3DSequenceAnnotation,
+from .dataset_utils.orm_types import UCO3DFrameAnnotation, UCO3DSequenceAnnotation
+
+from .dataset_utils.utils import (
+    get_bbox_from_mask,
+    get_dataset_root,
+    load_depth,
+    load_depth_mask,
+    load_image,
+    load_mask,
+    LruCacheWithCleanup,
+    safe_as_tensor,
+    transpose_normalize_image,
+    UCO3D_DATASET_ROOT_ENV_VAR,
+    undistort_frame_data_opencv,
 )
-from .dataset_utils.frame_data import UCO3DFrameData
-from .dataset_utils.data_types import Cameras, PointCloud
 
 
 logger = logging.getLogger(__name__)
@@ -61,7 +61,7 @@ class UCO3DFrameDataBuilder:
     Args:
         dataset_root: The root folder of the dataset; all paths in frame / sequence
             annotations are defined w.r.t. this root. Has to be set if any of the
-            load_* flabs below is true.
+            load_* flags below is true.
         load_images: Enable loading the frame RGB data.
         load_depths: Enable loading the frame depth maps.
         load_depth_masks: Enable loading the frame depth map masks denoting the
@@ -96,7 +96,7 @@ class UCO3DFrameDataBuilder:
         path_manager: Optionally a PathManager for interpreting paths in a special way.
     """
 
-    dataset_root: Optional[str] = None
+    dataset_root: Optional[str] = get_dataset_root()
     load_images: bool = True
     load_depths: bool = True
     load_depth_masks: bool = True
@@ -126,6 +126,22 @@ class UCO3DFrameDataBuilder:
         if (self.image_width is None) != (self.image_height is None):
             raise ValueError(
                 "Both image_height and image_width have to be set or unset."
+            )
+        if self.dataset_root is None and any(
+            [
+                self.load_images,
+                self.load_depths,
+                self.load_masks,
+                self.load_point_clouds,
+                self.load_segmented_point_clouds,
+                self.load_sparse_point_clouds,
+                self.load_gaussian_splats,
+            ]
+        ):
+            raise ValueError(
+                "dataset_root has to be set if any of the load_* flags is true."
+                f"Either set the {UCO3D_DATASET_ROOT_ENV_VAR} env variable or"
+                " set the UCO3DFrameDataBuilder.dataset_root to a correct path."
             )
         self._video_capture_cache = LruCacheWithCleanup[str, cv2.VideoCapture](
             create_fn=lambda path: cv2.VideoCapture(path),
@@ -242,13 +258,21 @@ class UCO3DFrameDataBuilder:
         # Load depth map from depth_video.mkv
         if load_blobs and self.load_depths:
             if self.load_frames_from_videos:
-                (depth_map, depth_path, depth_mask,) = self._load_mask_depth_from_video(
+                (
+                    depth_map,
+                    depth_path,
+                    depth_mask,
+                ) = self._load_mask_depth_from_video(
                     frame_annotation,
                     sequence_annotation,
                     frame_data.fg_probability,
                 )
             else:
-                (depth_map, depth_path, depth_mask,) = self._load_mask_depth_from_file(
+                (
+                    depth_map,
+                    depth_path,
+                    depth_mask,
+                ) = self._load_mask_depth_from_file(
                     frame_annotation,
                     frame_data.fg_probability,
                 )
@@ -293,8 +317,8 @@ class UCO3DFrameDataBuilder:
             if self.gaussian_splats_truncate_background:
                 if sequence_gaussians.fg_mask is None:
                     warnings.warn(
-                        f"No fg mask found for truncation in {gaussians_dir}!"
-                        " Skipping bg cropping"
+                        f"No Gaussian foreground mask found for truncation"
+                        f" {gaussians_dir}! Skipping background cropping."
                     )
                 else:
                     sequence_gaussians = truncate_bg_gaussians(sequence_gaussians)
