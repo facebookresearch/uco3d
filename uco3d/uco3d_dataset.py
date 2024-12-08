@@ -354,6 +354,12 @@ class UCO3DDataset:  # pyre-ignore
         stmt = sa.select(UCO3DSequenceAnnotation)
         with self._sql_engine.connect() as connection:
             return pd.read_sql(stmt, connection)
+        
+    def frame_annotations(self) -> pd.DataFrame:
+        """Returns a DataFrame with all frame annotations."""
+        stmt = sa.select(UCO3DFrameAnnotation)
+        with self._sql_engine.connect() as connection:
+            return pd.read_sql(stmt, connection)
 
     def sequence_names(self) -> Iterable[str]:
         """Returns an iterator over sequence names in the dataset."""

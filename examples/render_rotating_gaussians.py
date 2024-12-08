@@ -8,6 +8,7 @@
 import os
 import torch
 import math
+import glob
 import dataclasses
 import numpy as np
 import tempfile
@@ -243,11 +244,62 @@ def get_dataset() -> UCO3DDataset:
     return dataset
 
 
+# TODO: erase this function
+def _copy_dataset_to_target_dir(
+    dataset,
+    export_dataset_root: str,
+):
+    import shutil
+    from tqdm import tqdm
+    fls_to_copy = []
+    for seq_name in dataset.sequence_names():
+        for modality in [
+            "depth_videos",
+            "gaussian_splats",
+            "mask_videos",
+            "point_clouds",
+            "rgb_videos",
+            "segmented_point_clouds",
+            "sparse_point_clouds",
+        ]:
+            fls_to_copy.extend(
+                glob.glob(
+                    os.path.join(
+                        dataset.dataset_root,
+                        modality,
+                        seq_name,
+                        "*",
+                    )
+                )
+            )
+            
+    fls_to_copy.append(os.path.join(dataset.sqlite_metadata_file))
+    fls_to_copy.append(os.path.join(dataset.subset_lists_file))
+            
+    for fl in tqdm(fls_to_copy):
+        tgt_file = fl.replace(
+            dataset.dataset_root,
+            export_dataset_root,
+        )
+        print(f"{fl}\n    -> {tgt_file}")
+        os.makedirs(os.path.dirname(tgt_file), exist_ok=True)
+        if os.path.isdir(fl):
+            shutil.copytree(fl, tgt_file)
+        else:
+            shutil.copy(fl, tgt_file)
+
+
 def main():
     outroot = os.path.join(os.path.dirname(__file__), "render_rotating_gaussians")
     os.makedirs(outroot, exist_ok=True)
     
     dataset = get_dataset()
+    
+    # _copy_dataset_to_target_dir(
+    #     dataset,
+    #     export_dataset_root="/fsx-repligen/dnovotny/datasets/uco3d_sample/",
+    # )
+    
     seq_annots = dataset.sequence_annotations()
     sequence_name_to_score = dict(
         zip(
@@ -270,6 +322,10 @@ def main():
         outfile = os.path.join(outroot, seq_name + "")
         dataset_idx = next(dataset.sequence_indices_in_order(seq_name))
         frame_data = dataset[dataset_idx]
+
+        _copy_scene_to_tempdir(frame_data, outfile)
+
+
         render_gaussians(frame_data, outfile)
 
 
