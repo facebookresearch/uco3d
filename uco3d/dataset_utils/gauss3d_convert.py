@@ -5,18 +5,16 @@
 # LICENSE file in the root directory of this source tree.
 
 
-# https://github.com/antimatter15/splat/tree/main
-
-
-import os
-import numpy as np
 import argparse
-from io import BytesIO
+import os
 from dataclasses import dataclass
+from io import BytesIO
+
+import numpy as np
+from omegaconf import OmegaConf
 
 from plyfile import PlyData, PlyElement
 from scipy.spatial.transform import Rotation
-from omegaconf import OmegaConf
 
 from .sh_utils import SHRotator
 
@@ -80,7 +78,8 @@ def batch_decompose_rs(RS):
 def batch_rotate_sh(R, shs_in, max_sh_degree=3):
     # shs_in: (n, 3, deg)
     # SH is in yzx order so here shift the order of rot mat
-    rot_fn = SHRotator(R, deg=max_sh_degree)
+    # rot_fn = SHRotator(R, deg=max_sh_degree)  # original
+    rot_fn = SHRotator(R.T, deg=max_sh_degree)  # bugfixed
     shs_out = np.stack(
         [
             rot_fn(shs_in[..., 0, :]),

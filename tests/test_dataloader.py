@@ -8,7 +8,6 @@
 import os
 import random
 import unittest
-import warnings
 
 import torch
 
@@ -21,14 +20,11 @@ from torch.utils.data import DataLoader
 from uco3d.dataset_utils.scene_batch_sampler import SceneBatchSampler
 from uco3d.dataset_utils.utils import load_depth, resize_image
 
-from uco3d.uco3d_dataset import UCO3DDataset
-from uco3d.uco3d_frame_data_builder import UCO3DFrameDataBuilder
-
 
 class TestDataloader(unittest.TestCase):
     def setUp(self):
+        random.seed(42)
         self.dataset = get_all_load_dataset()
-        self.subset_lists_file = self.dataset.subset_lists_file
 
     def test_iterate_dataset(self):
         dataset = self.dataset
@@ -49,7 +45,6 @@ class TestDataloader(unittest.TestCase):
                 break
 
     def test_iterate_scene_batch_sampler(self):
-        warnings.warn("This is super slow, why??")
         dataset = self.dataset
         scene_batch_sampler = SceneBatchSampler(
             dataset=dataset,
@@ -68,29 +63,25 @@ class TestDataloader(unittest.TestCase):
 
     def _test_depth_map_from_video(self):
         depth_map_root = "/fsx-repligen/shared/datasets/uCO3D/temp_depth_check"
-        frame_data_builder_depth = UCO3DFrameDataBuilder(
-            apply_alignment=False,
-            load_images=True,
-            load_depths=True,
-            load_masks=False,
-            load_depth_masks=False,
-            load_gaussian_splats=False,
-            gaussian_splats_truncate_background=False,
-            load_point_clouds=False,
-            load_segmented_point_clouds=False,
-            load_sparse_point_clouds=False,
-            box_crop=False,  # !!!
-            load_frames_from_videos=True,
-            image_height=800,
-            image_width=800,
-            undistort_loaded_blobs=True,
+        dataset_depth = get_all_load_dataset(
+            frame_data_builder_kwargs=dict(
+                apply_alignment=False,
+                load_images=True,
+                load_depths=True,
+                load_masks=False,
+                load_depth_masks=False,
+                load_gaussian_splats=False,
+                gaussian_splats_truncate_background=False,
+                load_point_clouds=False,
+                load_segmented_point_clouds=False,
+                load_sparse_point_clouds=False,
+                box_crop=False,  # !!!
+                load_frames_from_videos=True,
+                image_height=800,
+                image_width=800,
+                undistort_loaded_blobs=True,
+            )
         )
-        dataset_depth = UCO3DDataset(
-            subset_lists_file=self.subset_lists_file,
-            subsets=["train"],
-            frame_data_builder=frame_data_builder_depth,
-        )
-
         load_idx = [random.randint(0, len(dataset_depth)) for _ in range(10)]
         for i in load_idx:
             frame_data = dataset_depth[i]
@@ -106,8 +97,8 @@ class TestDataloader(unittest.TestCase):
             depth_frame = torch.from_numpy(depth_frame)
             depth_frame_image, _, _ = resize_image(
                 depth_frame,
-                image_height=frame_data_builder_depth.image_height,
-                image_width=frame_data_builder_depth.image_width,
+                image_height=dataset_depth.frame_data_builder.image_height,
+                image_width=dataset_depth.frame_data_builder.image_width,
                 mode="nearest",
             )
             depth_frame_video = frame_data.depth_map

@@ -11,7 +11,8 @@ from typing import Tuple
 
 import torch
 
-from .data_types import GaussianSplats
+from .data_types import Cameras, GaussianSplats
+from .utils import opencv_cameras_projection_from_uco3d
 
 GSPLAT_AVAILABLE = True
 try:
@@ -21,12 +22,59 @@ except ImportError:
 
 
 def render_splats(
+    cameras: Cameras,
+    splats: GaussianSplats,
+    render_size: Tuple[int, int],
+    device: str = "cuda:0",
+    near_plane: float = 0.01,
+    **kwargs,
+):
+    """
+    Render a set of Gaussian splats using the gsplat library.
+
+    Args:
+        cameras: Rendering cameras.
+        splats: A GaussianSplats object containing the splats to render.
+        render_size: A tuple of integers (width, height) specifying the size of the rendered image.
+        device: The device to use for rendering. Default is "cuda:0".
+        near_plane: The near plane distance for rendering. Default is 1.0.
+
+    Returns:
+        render_colors: A tensor of shape [C, H, W, 3] containing the rendered colors.
+        render_alphas: A tensor of shape [C, H, W] containing the rendered alphas.
+        info: A dictionary containing additional information about the rendering.
+    """
+    n = cameras.R.shape[0]
+    image_size_tensor = torch.tensor(render_size)[None].repeat(n, 1)
+    Rcv, tvec, camera_matrix = opencv_cameras_projection_from_uco3d(
+        cameras,
+        image_size=image_size_tensor,
+    )
+    viewmats = torch.eye(4)[None].repeat(n, 1, 1)
+    viewmats[:, :3, :4] = torch.cat(
+        [Rcv, tvec[..., None]],
+        dim=-1,
+    )
+    return render_splats_opencv(
+        viewmats=viewmats,
+        camera_matrix=camera_matrix,
+        splats=splats,
+        render_size=render_size,
+        device=device,
+        near_plane=near_plane,
+        camera_matrix_in_ndc=False,
+        **kwargs,
+    )
+
+
+def render_splats_opencv(
     viewmats: torch.Tensor,
     camera_matrix: torch.Tensor,
     splats: GaussianSplats,
     render_size: Tuple[int, int],
     device: str = "cuda:0",
-    near_plane: float = 1.0,
+    near_plane: float = 0.01,
+    camera_matrix_in_ndc: bool = False,
     **kwargs,
 ):
     """
@@ -35,11 +83,15 @@ def render_splats(
     Args:
         viewmats: A tensor of shape [C, 4, 4] containing the view matrices for each camera.
         camera_matrix: A tensor of shape [C, 3, 3] containing the camera matrices for each camera.
-            The intrinsic matrix is in ndc coordinates, i.e. the image is in the range [-1, 1].
+
         splats: A GaussianSplats object containing the splats to render.
         render_size: A tuple of integers (width, height) specifying the size of the rendered image.
         device: The device to use for rendering. Default is "cuda:0".
         near_plane: The near plane distance for rendering. Default is 1.0.
+        camera_matrix_in_ndc: A boolean indicating whether the camera matrix is in ndc coordinates.
+            Default is False.
+            If True, The intrinsic matrix is in ndc coordinates,
+            i.e. the image is in the range [-1, 1].
 
     Returns:
         render_colors: A tensor of shape [C, H, W, 3] containing the rendered colors.
@@ -69,10 +121,15 @@ def render_splats(
     quats = splats["quats"]  # [N, 4]
     scales = torch.exp(splats["scales"])  # [N, 3]
     opacities = torch.sigmoid(splats["opacities"].flatten())  # [N,]
+
     colors = torch.cat(
         [
             splats["sh0"][:, None],
-            splats.get("shN", torch.empty([N, 0, 3], device=device)),
+            (
+                splats["shN"]
+                if splats["shN"] is not None
+                else torch.zeros([N, 1, 3], device=device)
+            ),
         ],
         1,
     )  # [N, K, 3]
@@ -81,16 +138,19 @@ def render_splats(
     assert sh_degree.is_integer()
     sh_degree = int(sh_degree)
 
-    # convert ndc camera matrix to pixel camera matrix
-    camera_matrix_pix = torch.tensor(
-        [
-            [0.5 * width, 0, 0.5 * width],
-            [0, 0.5 * height, 0.5 * height],
-            [0, 0, 1],
-        ],
-        dtype=torch.float32,
-        device=device,
-    )[None] @ camera_matrix.to(device, dtype=torch.float32)
+    if camera_matrix_in_ndc:
+        # convert ndc camera matrix to pixel camera matrix
+        camera_matrix_pix = torch.tensor(
+            [
+                [0.5 * width, 0, 0.5 * width],
+                [0, 0.5 * height, 0.5 * height],
+                [0, 0, 1],
+            ],
+            dtype=torch.float32,
+            device=device,
+        )[None] @ camera_matrix.to(device, dtype=torch.float32)
+    else:
+        camera_matrix_pix = camera_matrix.to(device, dtype=torch.float32)
 
     render_colors, render_alphas, info = rasterization(
         means=means,

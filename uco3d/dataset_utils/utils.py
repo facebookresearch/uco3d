@@ -19,8 +19,9 @@ import cv2
 import numpy as np
 import torch
 from PIL import Image
+from plyfile import PlyData
 
-from .data_types import Cameras
+from .data_types import Cameras, PointCloud
 
 logger = logging.getLogger(__name__)
 
@@ -261,6 +262,22 @@ def load_depth_mask(path: str) -> np.ndarray:
     return m[None]  # fake feature channel
 
 
+def load_point_cloud(path: str):
+    ply_data = PlyData.read(path)
+    xyz = torch.tensor(
+        ply_data.elements[0].data[["x", "y", "z"]].tolist(),
+        dtype=torch.float32,
+    )
+    rgb = (
+        torch.tensor(
+            ply_data.elements[0].data[["red", "green", "blue"]].tolist(),
+            dtype=torch.float32,
+        )
+        / 255.0
+    )
+    return PointCloud(xyz, rgb)
+
+
 def safe_as_tensor(data, dtype):
     return torch.tensor(data, dtype=dtype) if data is not None else None
 
@@ -338,6 +355,7 @@ def adjust_camera_to_image_scale_(
     )
     camera.focal_length = focal_length_scaled[None]
     camera.principal_point = principal_point_scaled[None]  # pyre-ignore
+    camera.image_size = new_size_wh.flip(dims=[0])[None]
 
 
 def undistort_frame_data_opencv(frame_data):
@@ -493,11 +511,18 @@ class LruCacheWithCleanup(Generic[K_type, T_type]):
     max_size: int | None = None
     _cache: dict[K_type, T_type] = field(init=False, default_factory=lambda: {})
 
+    def __post_init__(self) -> None:
+        self._n_hits = 0
+        self._n_misses = 0
+
     def __getitem__(self, key: K_type) -> T_type:
         if key in self._cache:
+            # logger.debug(f"Cache hit: {key}")
             value = self._cache.pop(key)
             self._cache[key] = value  # update the order
+            self._n_hits += 1
             return value
+        self._n_misses += 1
 
         # inserting a new element
         if self.max_size and len(self._cache) >= self.max_size:

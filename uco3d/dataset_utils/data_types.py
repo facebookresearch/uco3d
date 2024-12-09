@@ -5,11 +5,13 @@
 # LICENSE file in the root directory of this source tree.
 
 
-from dataclasses import dataclass, fields
-from typing import Optional, Tuple, Union, List, Sequence
-import torch
-import logging
 import copy
+import logging
+import warnings
+from dataclasses import dataclass, fields
+from typing import List, Optional, Sequence, Tuple, Union
+
+import torch
 
 try:
     from pytorch3d.renderer import PerspectiveCameras
@@ -38,51 +40,166 @@ class Cameras:
     method.
     """
 
-    R: torch.Tensor = torch.eye(3)
-    T: torch.Tensor = torch.zeros(3)
-    focal_length: _FocalLengthType = 1.0
-    principal_point: _PrincipalPointType = (0.0, 0.0)
-    colmap_distortion_coeffs: torch.Tensor = torch.zeros(12)
-    device: str = "cpu"
+    R: torch.Tensor = torch.eye(3)[None]
+    T: torch.Tensor = torch.zeros(1, 3)
+    focal_length: _FocalLengthType = torch.ones(1, 2)
+    principal_point: _PrincipalPointType = torch.zeros(1, 2)
+    colmap_distortion_coeffs: torch.Tensor = torch.zeros(1, 12)
+    device: torch.device = torch.device("cpu")
     in_ndc: bool = True
     image_size: Optional[Union[List, Tuple, torch.Tensor]] = None
+
+    def __post_init__(self):
+        for field in [
+            "R",
+            "T",
+            "focal_length",
+            "principal_point",
+            "colmap_distortion_coeffs",
+            "image_size",
+        ]:
+            if torch.is_tensor(getattr(self, field)):
+                assert getattr(self, field).device == self.device
 
     def to(self, *args, **kwargs):
         def _to_tensor(x):
             return x.to(*args, **kwargs) if torch.is_tensor(x) else x
 
+        R = self.R.to(*args, **kwargs)
         return Cameras(
-            R=self.R.to(*args, **kwargs),
+            R=R,
             T=self.T.to(*args, **kwargs),
             focal_length=_to_tensor(self.focal_length),
             principal_point=_to_tensor(self.principal_point),
             colmap_distortion_coeffs=_to_tensor(self.colmap_distortion_coeffs),
-            device=self.device,
+            device=R.device,
             in_ndc=self.in_ndc,
             image_size=_to_tensor(self.image_size),
         )
 
-    def project_points(self, world_points: torch.Tensor, eps=1e-5) -> torch.Tensor:
-        # Apply the projection formula: XR + T
-        world_points = world_points @ self.R + self.T
-        # Divide by the Z component
-        return world_points[..., :2] / world_points[..., 2:3].clip(eps)
+    def transform_points_camera_coords(
+        self,
+        world_points: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Convert points from world coordinates to camera coordinates.
 
-    def transform_points(self, world_points: torch.Tensor) -> torch.Tensor:
-        projected_points = self.project_points(world_points)
+        Args:
+            world_points: Tensor of shape (B, N, 3) giving
+                the world coordinates of the points.
 
-        focal_length_tensor = projected_points.new_tensor(
-            self.focal_length
-            if isinstance(self.focal_length, tuple)
-            else (self.focal_length, self.focal_length)
-        )
-        principal_point_tensor = projected_points.new_tensor(self.principal_point)
+        Returns:
+            Tensor of shape (B, N, 3) giving the
+                camera coordinates of the points.
+        """
+        assert world_points.ndim == 3
+        assert world_points.shape[-1] == 3
+        assert self.R.ndim == 3
+        assert self.T.ndim == 2
+        assert self.R.shape[1] == 3
+        assert self.R.shape[2] == 3
+        assert self.T.shape[1] == 3
+        return world_points @ self.R + self.T[:, None]
+
+    def transform_points(
+        self,
+        world_points: torch.Tensor,
+        eps: float | None = 1e-5,
+    ) -> torch.Tensor:
+        """
+        Transform points from world coordinates
+        to PyTorch3D NDC image coordinates.
+
+        Args:
+            world_points: Tensor of shape (B, N, 3) giving the
+                world coordinates of the points.
+            eps: A small value to avoid division by zero.
+
+        Returns:
+            Tensor of shape (B, N, 2) giving the ndc image coordinates
+                of the points.
+        """
+        camera_points = self.transform_points_camera_coords(world_points)
+        depth = camera_points[..., 2:3]
+        if eps is not None:
+            depth = torch.clamp(depth, min=eps)
+        projected_points = camera_points[..., :2] / depth
+        focal_length_tensor = self._handle_focal_length(like=projected_points)[:, None]
+        principal_point_tensor = self._handle_principal_point(like=projected_points)[
+            :, None
+        ]
         return projected_points * focal_length_tensor + principal_point_tensor
+
+    def transform_points_screen(
+        self,
+        world_points: torch.Tensor,
+        eps: float | None = 1e-5,
+    ):
+        """
+        Transform points from world coordinates to screen coordinates.
+
+        Args:
+            world_points: Tensor of shape (B, N, 3) giving the
+                world coordinates of the points.
+            eps: A small value to avoid division by zero.
+
+        Returns:
+            Tensor of shape (B, N, 2) giving the screen coordinates
+                of the points.
+        """
+        assert self.in_ndc, "Camera must be in NDC space"
+        # We require the image size, which is necessary for the transform
+        if self.image_size is None:
+            raise ValueError(
+                "For NDC to screen conversion, image_size=(height, width)"
+                " needs to be specified."
+            )
+        ndc_points = self.transform_points(world_points, eps=eps)
+        if not torch.is_tensor(self.image_size):
+            image_size = torch.tensor(self.image_size, device=self.device)
+        image_size = self.image_size.view(-1, 2)  # of shape (1 or B)x2
+        height, width = image_size.unbind(1)
+        # For non square images, we scale the points such that smallest side
+        # has range [-1, 1] and the largest side has range [-u, u], with u > 1.
+        # This convention is consistent with the PyTorch3D renderer
+        scale = (image_size.min(dim=1).values - 0.0) / 2.0
+
+        screen_points = ndc_points * scale.view(-1, *([1] * (ndc_points.ndim - 1)))
+        screen_points[..., 0] = screen_points[..., 0] - 1.0 * (width - 0.0) / 2.0
+        screen_points[..., 1] = screen_points[..., 1] - 1.0 * (height - 0.0) / 2.0
+        screen_points *= -1.0
+        return screen_points
+
+    def _handle_focal_length(self, like: torch.Tensor) -> torch.Tensor:
+        return (
+            self.focal_length.to(like.device)
+            if torch.is_tensor(self.focal_length)
+            else (
+                like.new_tensor(
+                    self.focal_length
+                    if isinstance(self.focal_length, tuple)
+                    else (self.focal_length, self.focal_length)
+                )
+            )
+        )
+
+    def _handle_principal_point(self, like: torch.Tensor) -> torch.Tensor:
+        return (
+            self.principal_point.to(like.device)
+            if torch.is_tensor(self.principal_point)
+            else like.new_tensor(self.principal_point)
+        )
 
     def to_pytorch3d_cameras(self):
         if _NO_PYTORCH3D:
             raise ImportError(
-                "pytorch3d is not installed to convert to PyTorch3D cameras"
+                "PyTorch3D is not installed to convert to PyTorch3D cameras."
+            )
+        if (self.colmap_distortion_coeffs != 0.0).any():
+            warnings.warn(
+                "Converting Cameras with non-trivial undistortion coefficients"
+                " to PyTorch3D PerspectiveCameras."
+                " However, PyTorch3D does not support distortion coefficients."
             )
         return PerspectiveCameras(
             R=self.R,
@@ -130,10 +247,10 @@ class GaussianSplats:
 
     means: torch.Tensor
     sh0: torch.Tensor
-    shN: Optional[torch.Tensor]
     opacities: torch.Tensor
     scales: torch.Tensor
     quats: torch.Tensor
+    shN: Optional[torch.Tensor] = None
     fg_mask: Optional[torch.Tensor] = None
 
 

@@ -18,16 +18,8 @@ import torchvision
 from internal.copy_dataset import get_dataset
 
 from uco3d import GaussianSplats, UCO3DDataset, UCO3DFrameDataBuilder
-from uco3d.dataset_utils.gauss_3d_rendering import render_splats
+from uco3d.dataset_utils.gauss_3d_rendering import render_splats_opencv
 from uco3d.dataset_utils.utils import get_dataset_root
-
-try:
-    from gsplat import rasterization
-except ImportError:
-    raise ImportError(
-        "Please install gsplat by running"
-        + " `pip install git+https://github.com/nerfstudio-project/gsplat.git`"
-    )
 
 
 def main():
@@ -109,11 +101,13 @@ def _render_gaussians(
     camera_matrices = camera_matrix[None].repeat(n_frames, 1, 1)
 
     # render the splats
-    renders, _, _ = render_splats(
+    renders, _, _ = render_splats_opencv(
         viewmats,
         camera_matrices,
         splats_truncated,
         [512, 512],
+        near_plane=1.0,
+        camera_matrix_in_ndc=True,
     )
 
     # finally write the visualisation
@@ -187,9 +181,10 @@ def _generate_circular_path(
 
 def _get_dataset() -> UCO3DDataset:
     dataset_root = get_dataset_root(assert_exists=True)
+    print("!!! REMOVE THIS !!!")
     setlists_file = os.path.join(
         dataset_root,
-        "set_lists_allcat_val1100.sqlite",
+        "set_lists_small.sqlite",
     )
     frame_data_builder_kwargs = dict(
         dataset_root=dataset_root,
@@ -211,8 +206,6 @@ def _get_dataset() -> UCO3DDataset:
     )
     frame_data_builder = UCO3DFrameDataBuilder(**frame_data_builder_kwargs)
     dataset_kwargs = dict(
-        dataset_root=dataset_root,
-        sqlite_metadata_file=metadata_file,
         subset_lists_file=setlists_file,
         subsets=["train"],
         frame_data_builder=frame_data_builder,

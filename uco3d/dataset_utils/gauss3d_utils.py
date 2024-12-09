@@ -10,7 +10,6 @@ import dataclasses
 import json
 import math
 import os
-import warnings
 
 from typing import Any, Dict
 
@@ -26,7 +25,10 @@ from . import gauss3d_convert
 from .data_types import GaussianSplats
 
 
-def load_compressed_gaussians(compressed_dir: str) -> GaussianSplats:
+def load_compressed_gaussians(
+    compressed_dir: str,
+    load_higher_order_harms: bool = True,
+) -> GaussianSplats:
     """
     Load compressed Gaussian splats from a directory.
     """
@@ -35,8 +37,11 @@ def load_compressed_gaussians(compressed_dir: str) -> GaussianSplats:
     splats = {}
     n = meta["means"]["shape"][0]
     assert tuple(meta["sh0"]["shape"]) == (n, 1, 3)
-    meta["sh0"]["shape"] = (n, 3)  # adjust the sh0 shape to match our convention
+    # adjust the sh0 shape to match our convention
+    meta["sh0"]["shape"] = (n, 3)
     for param_name, param_meta in meta.items():
+        if not load_higher_order_harms and param_name == "shN":
+            continue
         decompress_fn = _get_decompress_fn(param_name)
         param_val = decompress_fn(compressed_dir, param_name, param_meta)
         if param_name == "means":
@@ -66,6 +71,9 @@ def truncate_bg_gaussians(splats: GaussianSplats) -> GaussianSplats:
 def save_gsplat_ply(splats: GaussianSplats, path: str):
     """
     Save gsplats to a ply file following the standard gsplat convention.
+
+    The result ply file can be visualized in standard 3D viewers.
+    E.g. in https://antimatter15.com/splat/.
     """
     splats = dataclasses.asdict(splats)
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -128,7 +136,7 @@ def transform_gaussian_splats(
 
     splats = dataclasses.asdict(splats_dataclass)
 
-    if "shN" in splats:  # add dummy 0 degree harmonics
+    if splats.get("shN", None) is not None:
         sh_degree = math.log2(splats["shN"].shape[-2] + 1) - 1
         assert sh_degree.is_integer()
         sh_degree = int(sh_degree)
@@ -241,7 +249,6 @@ def _decompress_png_16bit(
     """
 
     if not np.all(meta["shape"]):
-        params = torch.zeros(meta["shape"], dtype=getattr(torch, meta["dtype"]))
         return meta
 
     img_l = imageio.imread(os.path.join(compress_dir, f"{param_name}_l.png"))
@@ -278,7 +285,7 @@ def _decompress_png(
 
     if not np.all(meta["shape"]):
         params = torch.zeros(meta["shape"], dtype=getattr(torch, meta["dtype"]))
-        return meta
+        return params
 
     img = imageio.imread(os.path.join(compress_dir, f"{param_name}.png"))
     img_norm = img / (2**8 - 1)
@@ -309,7 +316,7 @@ def _decompress_kmeans(
     """
     if not np.all(meta["shape"]):
         params = torch.zeros(meta["shape"], dtype=getattr(torch, meta["dtype"]))
-        return meta
+        return params
 
     npz_dict = np.load(os.path.join(compress_dir, f"{param_name}.npz"))
     centroids_quant = npz_dict["centroids"]
@@ -337,7 +344,7 @@ def _decompress_npz(
 ):
     if not np.all(meta["shape"]):
         params = torch.zeros(meta["shape"], dtype=getattr(torch, meta["dtype"]))
-        return meta
+        return params
     npz_dict = np.load(os.path.join(compress_dir, f"{param_name}.npz"))
     array = torch.tensor(npz_dict["arr"])
     if resize:

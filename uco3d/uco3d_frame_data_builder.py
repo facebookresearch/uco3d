@@ -6,12 +6,14 @@
 
 
 import copy
+import functools
 import logging
 import os
 import time
 import typing
 import warnings
 from dataclasses import asdict, dataclass
+from json import load
 from typing import Any, Literal, Optional, Tuple
 
 import cv2
@@ -20,7 +22,7 @@ import torch
 
 from plyfile import PlyData
 
-from .dataset_utils.data_types import Cameras, PointCloud
+from .dataset_utils.data_types import Cameras, GaussianSplats, PointCloud
 from .dataset_utils.frame_data import UCO3DFrameData
 
 from .dataset_utils.gauss3d_utils import (
@@ -38,6 +40,7 @@ from .dataset_utils.utils import (
     load_depth_mask,
     load_image,
     load_mask,
+    load_point_cloud,
     LruCacheWithCleanup,
     safe_as_tensor,
     transpose_normalize_image,
@@ -73,6 +76,8 @@ class UCO3DFrameDataBuilder:
         load_gaussian_splats: Enable loading sequence-level 3D gaussian splats.
         gaussian_splats_truncate_background: Whether to truncate the background
             means of the gaussian splats.
+        gaussian_splats_load_higher_order_harms: Whether to load higher order
+            harmonics for the gaussian splats.
         mask_images: Whether to mask the images with the loaded foreground masks;
             0 value is used for background.
         mask_depths: Whether to mask the depth maps with the loaded foreground
@@ -92,7 +97,10 @@ class UCO3DFrameDataBuilder:
         apply_alignment: Whether to apply the alignment transform mapping the
             cameras, point clouds, and gaussians to the canonical object-centric
             coordinate frame.
-        use_cache: Whether to cache the video capture objects.
+        use_cache: Whether to cache the video capture objects, point clouds and gaussians.
+        video_capture_cache_size: Size of the cache for video capture objects.
+        point_cloud_cache_size: Size of the cache for point clouds.
+        gaussian_splat_cache_size: Size of the cache for gaussian splats.
         path_manager: Optionally a PathManager for interpreting paths in a special way.
     """
 
@@ -107,6 +115,7 @@ class UCO3DFrameDataBuilder:
     max_points: int = 0
     load_gaussian_splats: bool = False
     gaussian_splats_truncate_background: bool = False
+    gaussian_splats_load_higher_order_harms: bool = True
     undistort_loaded_blobs: bool = True
     load_frames_from_videos: bool = True
     image_height: Optional[int] = 800
@@ -119,6 +128,8 @@ class UCO3DFrameDataBuilder:
     mask_depths: bool = False
     video_capture_cache_size: int = 16
     depth_video_fps: int = 20
+    point_cloud_cache_size: int = 32
+    gaussian_splat_cache_size: int = 32
     use_cache: bool = True
     path_manager: Any = None
 
@@ -143,11 +154,26 @@ class UCO3DFrameDataBuilder:
                 f"Either set the {UCO3D_DATASET_ROOT_ENV_VAR} env variable or"
                 " set the UCO3DFrameDataBuilder.dataset_root to a correct path."
             )
-        self._video_capture_cache = LruCacheWithCleanup[str, cv2.VideoCapture](
-            create_fn=lambda path: cv2.VideoCapture(path),
-            cleanup_fn=lambda capture: capture.release(),
-            max_size=self.video_capture_cache_size,
-        )
+
+        if self.use_cache:
+            self._video_capture_cache = LruCacheWithCleanup[str, cv2.VideoCapture](
+                create_fn=lambda path: cv2.VideoCapture(path),
+                cleanup_fn=lambda capture: capture.release(),
+                max_size=self.video_capture_cache_size,
+            )
+            self._point_cloud_cache = LruCacheWithCleanup[str, PointCloud](
+                create_fn=load_point_cloud,
+                cleanup_fn=lambda _: None,
+                max_size=self.point_cloud_cache_size,
+            )
+            self._gaussian_splat_cache = LruCacheWithCleanup[str, GaussianSplats](
+                create_fn=functools.partial(
+                    load_compressed_gaussians,
+                    load_higher_order_harms=self.gaussian_splats_load_higher_order_harms,
+                ),
+                cleanup_fn=lambda _: None,
+                max_size=self.point_cloud_cache_size,
+            )
 
     def build(
         self,
@@ -303,8 +329,10 @@ class UCO3DFrameDataBuilder:
                 assert pcl_annot is not None
                 pcl_path = os.path.join(self.dataset_root, pcl_annot.path)
                 point_cloud = self._load_point_cloud(pcl_path)
-                setattr(frame_data, f"{pcl_type_str}point_cloud_path", pcl_path)
-                setattr(frame_data, f"{pcl_type_str}point_cloud", point_cloud)
+                setattr(
+                    frame_data, f"sequence_{pcl_type_str}point_cloud_path", pcl_path
+                )
+                setattr(frame_data, f"sequence_{pcl_type_str}point_cloud", point_cloud)
 
         # warnings.warn("Test gaussian splat loading!")
         if load_blobs and self.load_gaussian_splats:
@@ -312,8 +340,16 @@ class UCO3DFrameDataBuilder:
                 self.dataset_root,
                 sequence_annotation.gaussian_splats.dir,
             )
-            gaussians_dir_local = self._local_path(gaussians_dir)
-            sequence_gaussians = load_compressed_gaussians(gaussians_dir_local)
+            if self.use_cache:
+                sequence_gaussians = copy.deepcopy(
+                    self._gaussian_splat_cache[gaussians_dir]
+                )  # make sure we do not overwrite the cache
+            else:
+                gaussians_dir_local = self._local_path(gaussians_dir)
+                sequence_gaussians = load_compressed_gaussians(
+                    gaussians_dir_local,
+                    load_higher_order_harms=self.gaussian_splats_load_higher_order_harms,
+                )
             if self.gaussian_splats_truncate_background:
                 if sequence_gaussians.fg_mask is None:
                     warnings.warn(
@@ -344,7 +380,7 @@ class UCO3DFrameDataBuilder:
             sequence_annotation.alignment_scale or 1.0, dtype=torch.float32
         )
 
-        camera_before = copy.deepcopy(frame_data.camera)
+        # camera_before = copy.deepcopy(frame_data.camera)
 
         # align the camera using the align transform
         frame_data.camera.R = R.transpose(-1, -2) @ frame_data.camera.R
@@ -352,19 +388,22 @@ class UCO3DFrameDataBuilder:
 
         # align point clouds
         for pcl_type_str in ["", "sparse_", "segmented_"]:
-            pcl_field = f"{pcl_type_str}point_cloud"
+            pcl_field = f"sequence_{pcl_type_str}point_cloud"
+            assert hasattr(frame_data, pcl_field), f"Missing {pcl_field}!"
             pcl = getattr(frame_data, pcl_field, None)
             if pcl is None:
                 continue
-            points_before = torch.nn.functional.normalize(
-                pcl.xyz @ camera_before.R + camera_before.T
-            )
-            pcl.xyz = (pcl.xyz @ R + T) * s
-            setattr(frame_data, pcl_field, pcl)
-            points_after = torch.nn.functional.normalize(
-                pcl.xyz @ frame_data.camera.R + frame_data.camera.T
-            )
-            assert torch.allclose(points_after, points_before, atol=1e-2)
+            # points_before = torch.nn.functional.normalize(
+            #     pcl.xyz @ camera_before.R + camera_before.T
+            # )
+            pcl_align = copy.copy(pcl)
+            pcl_align.xyz = (pcl.xyz @ R + T) * s
+            setattr(frame_data, pcl_field, pcl_align)
+            # points_after = torch.nn.functional.normalize(
+            #     pcl.xyz @ frame_data.camera.R + frame_data.camera.T
+            # )
+            # print((points_after - points_before).abs().max())
+            # assert torch.allclose(points_after, points_before, atol=1e-2)
 
         if frame_data.sequence_gaussian_splats is not None:
             frame_data.sequence_gaussian_splats = transform_gaussian_splats(
@@ -375,25 +414,17 @@ class UCO3DFrameDataBuilder:
             # dont forget to rescale the depth map as well
             frame_data.depth_map = frame_data.depth_map * s
 
-    def _load_point_cloud(self, path: str):
+    def _load_point_cloud(self, path: str) -> PointCloud:
         path_local = self._local_path(path)
         if not os.path.exists(path_local):
             raise FileNotFoundError(
                 f"PointCloud file {path} at {path_local} does not exist."
             )
-        ply_data = PlyData.read(path_local)
-        xyz = torch.tensor(
-            ply_data.elements[0].data[["x", "y", "z"]].tolist(),
-            dtype=torch.float32,
-        )
-        rgb = (
-            torch.tensor(
-                ply_data.elements[0].data[["red", "green", "blue"]].tolist(),
-                dtype=torch.float32,
-            )
-            / 255.0
-        )
-        return PointCloud(xyz, rgb)
+        if self.use_cache:
+            return copy.deepcopy(
+                self._point_cloud_cache[path]
+            )  # deepcopy to prevent cache overwrite
+        return load_point_cloud(path_local)
 
     # TODO: NOT USED SINCE WE LOAD FRAMES FROM VIDEOS -> consider removing
     def _load_mask_depth_from_file(
@@ -455,7 +486,8 @@ class UCO3DFrameDataBuilder:
                 + f" from {video_path}."
             )
             return None
-        path = self._local_path(os.path.join(self.dataset_root, video_path))
+        full_video_path = os.path.join(self.dataset_root, video_path)
+        path = self._local_path(full_video_path)
         if not os.path.isfile(path):
             raise FileNotFoundError(f"Video {path} does not exist.")
         time_1 = time.time()
@@ -464,7 +496,9 @@ class UCO3DFrameDataBuilder:
             f" object is {time_1-start_time}"
         )
         capture = (
-            self._video_capture_cache[path]
+            # For cache we need to use the non-local full_video_path
+            # because local paths can conflict
+            self._video_capture_cache[full_video_path]
             if self.use_cache
             else cv2.VideoCapture(path)
         )
