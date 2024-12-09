@@ -18,6 +18,7 @@ from .dataset_utils.data_types import (  # noqa
     PointCloud,
 )
 from .dataset_utils.frame_data import UCO3DFrameData  # noqa
+from .dataset_utils.gauss_3d_rendering import render_splats  # noqa
 from .dataset_utils.orm_types import (  # noqa
     UCO3DFrameAnnotation,
     UCO3DSequenceAnnotation,

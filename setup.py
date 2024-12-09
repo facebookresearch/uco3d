@@ -12,5 +12,6 @@ setup(
         "torch",
         "matplotlib",
         "plyfile",
+        "h5py",
     ],
 )
