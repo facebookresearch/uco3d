@@ -323,7 +323,7 @@ class TestGaussiansPCL(unittest.TestCase):
                     y[:, 0].numpy(),
                     y[:, 1].numpy(),
                     c=pcl_rgb_sel[pcl_type],
-                    s=10.0,
+                    s=20.0,
                     marker="x",
                 )
                 ax_now.set_xlim(0, im.shape[1])
