@@ -61,6 +61,9 @@ class Cameras:
             if torch.is_tensor(getattr(self, field)):
                 assert getattr(self, field).device == self.device
 
+    def __len__(self):
+        return self.R.shape[0]
+
     def to(self, *args, **kwargs):
         def _to_tensor(x):
             return x.to(*args, **kwargs) if torch.is_tensor(x) else x

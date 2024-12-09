@@ -360,6 +360,9 @@ class UCO3DFrameDataBuilder:
                     sequence_gaussians = truncate_bg_gaussians(sequence_gaussians)
             frame_data.sequence_gaussian_splats = sequence_gaussians
 
+        if self.box_crop:
+            frame_data.crop_by_metadata_bbox_(self.box_crop_context)
+
         if self.image_height is not None and self.image_width is not None:
             new_size = (self.image_height, self.image_width)
             frame_data.resize_frame_(

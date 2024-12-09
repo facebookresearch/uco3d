@@ -18,6 +18,11 @@ from uco3d.dataset_utils.utils import get_dataset_root
 from uco3d.uco3d_dataset import UCO3DDataset
 from uco3d.uco3d_frame_data_builder import UCO3DFrameDataBuilder
 
+VISUALIZATION_DIR = os.path.join(
+    os.path.dirname(__file__),
+    "test_outputs",
+)
+
 
 def get_all_load_dataset(
     dataset_kwargs={},

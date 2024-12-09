@@ -16,17 +16,16 @@ import numpy as np
 import torch
 import torchvision
 
-from testing_utils import fig_to_np_array, get_all_load_dataset, load_whole_sequence
+from testing_utils import (
+    fig_to_np_array,
+    get_all_load_dataset,
+    load_whole_sequence,
+    VISUALIZATION_DIR,
+)
 
 from tqdm import tqdm
 from uco3d.dataset_utils.gauss3d_utils import save_gsplat_ply
 from uco3d.dataset_utils.gauss_3d_rendering import render_splats
-
-
-VISUALIZATION_DIR = os.path.join(
-    os.path.dirname(__file__),
-    "test_outputs",
-)
 
 
 class TestGaussiansPCL(unittest.TestCase):
@@ -107,7 +106,7 @@ class TestGaussiansPCL(unittest.TestCase):
                     load_point_clouds=False,
                     load_segmented_point_clouds=False,
                     box_crop=True,
-                    box_crop_context=0.1,
+                    box_crop_context=0.4,
                 )
             )
             for apply_alignment in [True, False]
@@ -182,7 +181,7 @@ class TestGaussiansPCL(unittest.TestCase):
                 load_point_clouds=False,
                 load_segmented_point_clouds=False,
                 box_crop=True,
-                box_crop_context=0.1,
+                box_crop_context=0.5,
             )
         )
         seq_names = list(dataset.sequence_names())[:3]
@@ -261,7 +260,7 @@ class TestGaussiansPCL(unittest.TestCase):
                 apply_alignment=True,
                 load_gaussian_splats=False,
                 box_crop=True,
-                box_crop_context=0.05,
+                box_crop_context=0.3,
             )
         )
         seq_names = list(dataset.sequence_names())[:3]
@@ -324,7 +323,8 @@ class TestGaussiansPCL(unittest.TestCase):
                     y[:, 0].numpy(),
                     y[:, 1].numpy(),
                     c=pcl_rgb_sel[pcl_type],
-                    s=4.0,
+                    s=10.0,
+                    marker="x",
                 )
                 ax_now.set_xlim(0, im.shape[1])
                 ax_now.set_ylim(im.shape[0], 0)
