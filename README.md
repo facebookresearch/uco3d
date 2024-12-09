@@ -4,14 +4,13 @@
 
 # uCO3D Dataset
 
-uCO3D is a dataset of around 170,000 turn-tabe videos capturing objects from
-the LVIS taxonomy of object categories.
+uCO3D is a dataset of around 170,000 turn-tabe videos capturing objects load_frames_from_videos the LVIS taxonomy of object categories.
 
 This repository contains download scripts and classes to access the data.
 
-```
-       ===> TODO: Dataset GIF <===
-```
+<center>
+===> TODO: Dataset GIF <===
+</center>
 
 ## Download & Install
 
