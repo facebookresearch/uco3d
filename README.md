@@ -1,4 +1,8 @@
-# 🔁 uCO3D Dataset
+<center>
+<img src="./uco3d_logo.png" width="400" />
+</center>
+
+# uCO3D Dataset
 
 uCO3D is a dataset of around 170,000 turn-tabe videos capturing objects from
 the LVIS taxonomy of object categories.
