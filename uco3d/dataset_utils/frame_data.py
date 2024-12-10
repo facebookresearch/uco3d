@@ -6,12 +6,14 @@
 
 
 import logging
-from dataclasses import dataclass, field, fields
 from collections import defaultdict
-from typing import Any, Optional, Mapping, Union, List
+from dataclasses import dataclass, field, fields
+from typing import Any, List, Mapping, Optional, Union
 
 import numpy as np
 import torch
+
+from .data_types import Cameras, GaussianSplats, join_uco3d_cameras_as_batch, PointCloud
 
 from .utils import (
     adjust_camera_to_bbox_crop_,
@@ -23,8 +25,6 @@ from .utils import (
     rescale_bbox,
     resize_image,
 )
-
-from .data_types import Cameras, PointCloud, GaussianSplats, join_uco3d_cameras_as_batch
 
 
 logger = logging.getLogger(__name__)

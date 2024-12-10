@@ -35,9 +35,8 @@ import torch
 from sqlalchemy.orm import Session
 
 from .dataset_utils.frame_data import UCO3DFrameData
-
 from .dataset_utils.orm_types import UCO3DFrameAnnotation, UCO3DSequenceAnnotation
-from .dataset_utils.utils import get_dataset_root, UCO3D_DATASET_ROOT_ENV_VAR
+from .dataset_utils.utils import get_dataset_root
 from .uco3d_frame_data_builder import UCO3DFrameDataBuilder
 
 logger = logging.getLogger(__name__)
@@ -45,7 +44,7 @@ logger = logging.getLogger(__name__)
 
 _SET_LISTS_TABLE: str = "set_lists"
 
-_DEFAULT_DATASET_ROOT: str = get_dataset_root()
+_DEFAULT_DATASET_ROOT: str = get_dataset_root(assert_exists=False)
 _DEFAULT_SQLITE_METADATA_FILE: str = (
     os.path.join(_DEFAULT_DATASET_ROOT, "metadata.sqlite")
     if _DEFAULT_DATASET_ROOT is not None
@@ -252,25 +251,28 @@ class UCO3DDataset:  # pyre-ignore
             raise ValueError(
                 "self.frame_data_builder must be set to enable data fetching."
             )
-        match frame_idx:
-            case int():
-                if frame_idx >= len(self._index):
-                    raise IndexError(
-                        f"index {frame_idx} out of range {len(self._index)}"
-                    )
 
-                seq, frame = self._index.index[frame_idx]
-            case seq, frame, *rest:
-                if isinstance(frame, torch.LongTensor):
-                    frame = frame.item()
+        if isinstance(frame_idx, int):
+            if frame_idx >= len(self._index):
+                raise IndexError(f"index {frame_idx} out of range {len(self._index)}")
 
-                if (seq, frame) not in self._index.index:
-                    raise IndexError(
-                        f"Sequence-frame index {frame_idx} not found; is it filtered out?"
-                    )
+            seq, frame = self._index.index[frame_idx]
+        elif isinstance(frame_idx, (tuple, list)):
+            seq, frame, *rest = frame_idx
 
-                if rest and rest[0] != self._index.loc[(seq, frame), "_image_path"]:
-                    raise IndexError(f"Non-matching image path in {frame_idx}.")
+            if isinstance(frame, torch.LongTensor):
+                frame = frame.item()
+
+            if (seq, frame) not in self._index.index:
+                raise IndexError(
+                    f"Sequence-frame index {frame_idx} not found; is it filtered out?"
+                )
+
+            if rest and rest[0] != self._index.loc[(seq, frame), "_image_path"]:
+                raise IndexError(f"Non-matching image path in {frame_idx}.")
+        else:
+            raise ValueError(f"Invalid frame index: {frame_idx}")
+
         stmt = sa.select(self.frame_annotations_type).where(
             self.frame_annotations_type.sequence_name == seq,
             self.frame_annotations_type.frame_number

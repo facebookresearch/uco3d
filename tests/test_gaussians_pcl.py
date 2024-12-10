@@ -16,14 +16,10 @@ import numpy as np
 import torch
 import torchvision
 
-from testing_utils import (
-    fig_to_np_array,
-    get_all_load_dataset,
-    load_whole_sequence,
-    VISUALIZATION_DIR,
-)
+from testing_utils import fig_to_np_array, VISUALIZATION_DIR
 
 from tqdm import tqdm
+from uco3d.data_utils import get_all_load_dataset, load_whole_sequence
 from uco3d.dataset_utils.gauss3d_utils import save_gsplat_ply
 from uco3d.dataset_utils.gauss_3d_rendering import render_splats
 
@@ -70,7 +66,7 @@ class TestGaussiansPCL(unittest.TestCase):
                 def _get_pcl_proj_rays(frame_data):
                     xyz = getattr(frame_data, pcl_type).xyz
                     camera = frame_data.camera
-                    xyz_cam = camera.transform_points_camera_coords(xyz[None])[0]
+                    xyz_cam = camera.transform_points_to_camera_coords(xyz[None])[0]
                     rays = torch.nn.functional.normalize(xyz_cam, dim=-1)
                     return rays
 

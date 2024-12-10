@@ -31,19 +31,22 @@ from .dataset_utils.gauss3d_utils import (
     truncate_bg_gaussians,
 )
 
-from .dataset_utils.orm_types import UCO3DFrameAnnotation, UCO3DSequenceAnnotation
-
-from .dataset_utils.utils import (
-    get_bbox_from_mask,
-    get_dataset_root,
+from .dataset_utils.io_utils import (
     load_depth,
     load_depth_mask,
     load_image,
     load_mask,
     load_point_cloud,
+    transpose_normalize_image,
+)
+
+from .dataset_utils.orm_types import UCO3DFrameAnnotation, UCO3DSequenceAnnotation
+
+from .dataset_utils.utils import (
+    get_bbox_from_mask,
+    get_dataset_root,
     LruCacheWithCleanup,
     safe_as_tensor,
-    transpose_normalize_image,
     UCO3D_DATASET_ROOT_ENV_VAR,
     undistort_frame_data_opencv,
 )

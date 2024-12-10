@@ -80,7 +80,7 @@ class Cameras:
             image_size=_to_tensor(self.image_size),
         )
 
-    def transform_points_camera_coords(
+    def transform_points_to_camera_coords(
         self,
         world_points: torch.Tensor,
     ) -> torch.Tensor:
@@ -104,6 +104,30 @@ class Cameras:
         assert self.T.shape[1] == 3
         return world_points @ self.R + self.T[:, None]
 
+    def transform_points_to_world_coords(
+        self,
+        camera_points: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Convert points from camera coordinates to world coordinates.
+
+        Args:
+            camera_points: Tensor of shape (B, N, 3) giving
+                the world coordinates of the points.
+
+        Returns:
+            Tensor of shape (B, N, 3) giving the
+                world coordinates of the points.
+        """
+        assert camera_points.ndim == 3
+        assert camera_points.shape[-1] == 3
+        assert self.R.ndim == 3
+        assert self.T.ndim == 2
+        assert self.R.shape[1] == 3
+        assert self.R.shape[2] == 3
+        assert self.T.shape[1] == 3
+        return (camera_points - self.T[:, None]) @ self.R.permute(0, 2, 1)
+
     def transform_points(
         self,
         world_points: torch.Tensor,
@@ -122,7 +146,7 @@ class Cameras:
             Tensor of shape (B, N, 2) giving the ndc image coordinates
                 of the points.
         """
-        camera_points = self.transform_points_camera_coords(world_points)
+        camera_points = self.transform_points_to_camera_coords(world_points)
         depth = camera_points[..., 2:3]
         if eps is not None:
             depth = torch.clamp(depth, min=eps)
@@ -162,16 +186,87 @@ class Cameras:
             image_size = torch.tensor(self.image_size, device=self.device)
         image_size = self.image_size.view(-1, 2)  # of shape (1 or B)x2
         height, width = image_size.unbind(1)
+        assert height.shape[0] == len(self)
+        assert width.shape[0] == len(self)
         # For non square images, we scale the points such that smallest side
         # has range [-1, 1] and the largest side has range [-u, u], with u > 1.
         # This convention is consistent with the PyTorch3D renderer
-        scale = (image_size.min(dim=1).values - 0.0) / 2.0
-
-        screen_points = ndc_points * scale.view(-1, *([1] * (ndc_points.ndim - 1)))
-        screen_points[..., 0] = screen_points[..., 0] - 1.0 * (width - 0.0) / 2.0
-        screen_points[..., 1] = screen_points[..., 1] - 1.0 * (height - 0.0) / 2.0
+        scale = image_size.min(dim=1).values / 2.0
+        screen_points = ndc_points * scale[:, None, None]
+        screen_points[..., 0] = screen_points[..., 0] - width[:, None] / 2.0
+        screen_points[..., 1] = screen_points[..., 1] - height[:, None] / 2.0
         screen_points *= -1.0
         return screen_points
+
+    def unproject_points(
+        self,
+        xy_depth: torch.Tensor,
+        world_coordinates: bool = False,
+    ):
+        """
+        Unproject points from image coordinates to world coordinates.
+
+        Args:
+            xy_depth: Tensor of shape (B, N, 3) giving the
+                image NDC coordinates of the points with depth concatenated
+                as the last dimension.
+            world_coordinates: If True, return unprojected points in
+                world coordinates. Otherwise, return camera coordinates.
+
+        Returns:
+            Tensor of shape (B, N, 3) giving the
+                world or camera coordinates of the points.
+        """
+        assert xy_depth.ndim == 3
+        assert xy_depth.shape[-1] == 3
+        assert len(xy_depth) == len(self)
+        focal_length_tensor = self._handle_focal_length(like=xy_depth)[:, None]
+        principal_point_tensor = self._handle_principal_point(like=xy_depth)[:, None]
+        xy, depth = xy_depth[..., :2], xy_depth[..., 2:]
+        xy_camera = (xy - principal_point_tensor) / focal_length_tensor
+        camera_points = torch.cat([depth * xy_camera, depth], dim=-1)
+        if world_coordinates:
+            return self.transform_points_to_world_coords(camera_points)
+        return camera_points
+
+    def unproject_screen_points(
+        self,
+        xy_screen_depth: torch.Tensor,
+        world_coordinates: bool = False,
+    ):
+        """
+        Unproject points from screen coordinates to world coordinates.
+
+        Args:
+            xy_screen_depth: Tensor of shape (B, N, 3) giving the
+                image screen coordinates of the points with depth concatenated
+                as the last dimension.
+            world_coordinates: If True, return unprojected points in
+                world coordinates. Otherwise, return camera coordinates.
+
+        Returns:
+            Tensor of shape (B, N, 3) giving the
+                world or camera coordinates of the points.
+        """
+        assert xy_screen_depth.ndim == 3
+        assert xy_screen_depth.shape[-1] == 3
+        assert len(xy_screen_depth) == len(self)
+        if not torch.is_tensor(self.image_size):
+            image_size = torch.tensor(self.image_size, device=self.device)
+        image_size = self.image_size.view(-1, 2)  # of shape (1 or B)x2
+        height, width = image_size.unbind(1)
+        assert height.shape[0] == len(self)
+        assert width.shape[0] == len(self)
+        scale = image_size.min(dim=1).values / 2.0
+        xy_ndc = xy_screen_depth[..., :2].clone()
+        xy_ndc *= -1.0
+        xy_ndc[..., 0] = xy_ndc[..., 0] + width[:, None] / 2.0
+        xy_ndc[..., 1] = xy_ndc[..., 1] + height[:, None] / 2.0
+        xy_ndc /= scale[:, None, None]
+        return self.unproject_points(
+            torch.cat([xy_ndc, xy_screen_depth[..., 2:3]], dim=-1),
+            world_coordinates=world_coordinates,
+        )
 
     def to_pytorch3d_cameras(self):
         if _NO_PYTORCH3D:

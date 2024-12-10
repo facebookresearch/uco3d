@@ -197,6 +197,19 @@ def transform_gaussian_splats(
     return GaussianSplats(**splats)
 
 
+def rgb_to_sh0(rgb: torch.Tensor) -> torch.Tensor:
+    """
+    Convert RGB to sh0.
+
+    Args:
+        sh0 (torch.Tensor): Tensor of shape (..., 3) containing the RGB values
+
+    Returns:
+        torch.Tensor: Tensor of shape (..., 3) containing the sh0 values
+    """
+    return (rgb - 0.5) / 0.2820947917738781
+
+
 def _construct_list_of_attributes(splats):
     l = ["x", "y", "z", "nx", "ny", "nz"]
     # All channels except the 3 DC

@@ -1,13 +1,10 @@
 from .dataset_utils.annotation_types import (  # noqa
     DepthAnnotation,
-    FrameAnnotation,
     GaussianSplatsAnnotation,
     ImageAnnotation,
     MaskAnnotation,
     PointCloudAnnotation,
     ReconstructionQualityAnnotation,
-    SequenceAnnotation,
-    UCO3DViewpointAnnotation,
     VideoAnnotation,
     ViewpointAnnotation,
 )

@@ -10,7 +10,6 @@ import unittest
 
 import torch
 from uco3d.dataset_utils.data_types import Cameras, PointCloud
-
 from uco3d.dataset_utils.frame_data import UCO3DFrameData
 
 

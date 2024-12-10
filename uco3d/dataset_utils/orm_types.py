@@ -4,17 +4,6 @@
 import warnings
 from typing import Optional, Tuple
 
-from .annotation_types import (
-    DepthAnnotation,
-    ImageAnnotation,
-    MaskAnnotation,
-    PointCloudAnnotation,
-    GaussianSplatsAnnotation,
-    VideoAnnotation,
-    UCO3DViewpointAnnotation,
-    ReconstructionQualityAnnotation,
-)
-
 # from sqlalchemy import LargeBinary
 from sqlalchemy.orm import (
     composite,
@@ -22,6 +11,19 @@ from sqlalchemy.orm import (
     Mapped,
     mapped_column,
     MappedAsDataclass,
+)
+
+from .annotation_types import (
+    AlignmentAnnotation,
+    CaptionAnnotation,
+    DepthAnnotation,
+    GaussianSplatsAnnotation,
+    ImageAnnotation,
+    MaskAnnotation,
+    PointCloudAnnotation,
+    ReconstructionQualityAnnotation,
+    VideoAnnotation,
+    ViewpointAnnotation,
 )
 
 # from sqlalchemy.types import TypeDecorator
@@ -60,7 +62,7 @@ class UCO3DFrameAnnotation(Base):
         ),
     )
 
-    viewpoint: Mapped[UCO3DViewpointAnnotation] = composite(
+    viewpoint: Mapped[ViewpointAnnotation] = composite(
         mapped_column(
             "_viewpoint_R", TupleTypeFactory(float, shape=(3, 3)), nullable=True
         ),
@@ -150,3 +152,78 @@ class UCO3DSequenceAnnotation(Base):
         type_=TupleTypeFactory(float, shape=(3,)), nullable=True
     )
     alignment_scale: Mapped[float] = mapped_column(nullable=True)
+
+
+# NEW VERSION:
+# class UCO3DSequenceAnnotation(Base):
+#     __tablename__ = "sequence_annots"
+
+#     sequence_name: Mapped[str] = mapped_column(primary_key=True)
+#     category: Mapped[str] = mapped_column(index=True, nullable=True)
+#     super_category: Mapped[str] = mapped_column(index=True, nullable=True)
+#     video: Mapped[VideoAnnotation] = composite(
+#         mapped_column("_video_path", nullable=True),
+#         mapped_column("_video_length", nullable=True),
+#     )
+#     mask_video: Mapped[VideoAnnotation] = composite(
+#         mapped_column("_mask_video_path", nullable=True),
+#         mapped_column("_mask_video_length", nullable=True),
+#     )
+#     depth_video: Mapped[VideoAnnotation] = composite(
+#         mapped_column("_depth_video_path", nullable=True),
+#         mapped_column("_depth_video_length", nullable=True),
+#     )
+#     sparse_point_cloud: Mapped[PointCloudAnnotation] = composite(
+#         mapped_column("_sparse_point_cloud_path", nullable=True),
+#         mapped_column("_sparse_point_cloud_n_points", nullable=True),
+#     )
+#     point_cloud: Mapped[PointCloudAnnotation] = composite(
+#         mapped_column("_point_cloud_path", nullable=True),
+#         mapped_column("_point_cloud_n_points", nullable=True),
+#     )
+#     segmented_point_cloud: Mapped[PointCloudAnnotation] = composite(
+#         mapped_column("_segmented_point_cloud_path", nullable=True),
+#         mapped_column("_segmented_point_cloud_n_points", nullable=True),
+#     )
+#     gaussian_splats: Mapped[GaussianSplatsAnnotation] = composite(
+#         mapped_column("_gaussian_splats_dir", nullable=True),
+#         mapped_column("_gaussian_splats_n_gaussians", nullable=True),
+#     )
+
+#     # TODO: Use this instead of the hack below!
+#     reconstruction_quality: Mapped[ReconstructionQualityAnnotation] = composite(
+#         mapped_column("_reconstruction_quality_viewpoint", nullable=True),
+#         mapped_column("_reconstruction_quality_gaussian_splats", nullable=True),
+#         mapped_column("_reconstruction_quality_gaussian_splats_psnr", nullable=True),
+#         mapped_column("_reconstruction_quality_gaussian_splats_ssim", nullable=True),
+#         mapped_column("_reconstruction_quality_gaussian_splats_lpips", nullable=True),
+#         mapped_column(
+#             "_reconstruction_quality_sfm_n_registered_cameras", nullable=True
+#         ),
+#         mapped_column("_reconstruction_quality_sfm_mean_track_length", nullable=True),
+#         mapped_column(
+#             "_reconstruction_quality_sfm_bundle_adjustment_final_cost", nullable=True
+#         ),
+#     )
+
+#     # captions
+#     caption: Mapped[CaptionAnnotation] = composite(
+#         mapped_column("_caption_text", nullable=True),
+#         mapped_column("_caption_clip_score", nullable=True),
+#     )
+
+#     short_caption: Mapped[CaptionAnnotation] = composite(
+#         mapped_column("_short_caption_text", nullable=True),
+#         mapped_column("_short_caption_clip_score", nullable=True),
+#     )
+
+#     # In right-multiply (PyTorch3D) format. X_transformed = scale * (X @ R + T)
+#     alignment: Mapped[AlignmentAnnotation] = composite(
+#         mapped_column(
+#             "_alignment_R", TupleTypeFactory(float, shape=(3, 3)), nullable=True
+#         ),
+#         mapped_column(
+#             "_alignment_T", TupleTypeFactory(float, shape=(3,)), nullable=True
+#         ),
+#         mapped_column("_alignment_scale"),
+#     )

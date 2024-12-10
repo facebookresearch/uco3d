@@ -7,15 +7,11 @@
 
 import argparse
 import dataclasses
-import math
 import os
-from typing import Tuple
 
 import numpy as np
 import torch
 import torchvision
-
-from internal.copy_dataset import get_dataset
 
 from uco3d import GaussianSplats, UCO3DDataset, UCO3DFrameDataBuilder
 from uco3d.dataset_utils.gauss_3d_rendering import render_splats_opencv

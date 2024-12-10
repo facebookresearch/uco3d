@@ -10,15 +10,16 @@ import random
 import unittest
 
 import torch
+from torch.utils.data import DataLoader
+from uco3d.data_utils import get_all_load_dataset
+from uco3d.dataset_utils.io_utils import load_depth
+from uco3d.dataset_utils.scene_batch_sampler import SceneBatchSampler
+from uco3d.dataset_utils.utils import resize_image
+
 
 # To resolve memory leaks giving received 0 items from anecdata
 # Reference link https://github.com/pytorch/pytorch/issues/973
 torch.multiprocessing.set_sharing_strategy("file_system")
-
-from testing_utils import get_all_load_dataset
-from torch.utils.data import DataLoader
-from uco3d.dataset_utils.scene_batch_sampler import SceneBatchSampler
-from uco3d.dataset_utils.utils import load_depth, resize_image
 
 
 class TestDataloader(unittest.TestCase):

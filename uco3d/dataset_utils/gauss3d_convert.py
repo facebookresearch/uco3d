@@ -5,15 +5,12 @@
 # LICENSE file in the root directory of this source tree.
 
 
-import argparse
 import os
 from dataclasses import dataclass
-from io import BytesIO
 
 import numpy as np
 from omegaconf import OmegaConf
 
-from plyfile import PlyData, PlyElement
 from scipy.spatial.transform import Rotation
 
 from .sh_utils import SHRotator
