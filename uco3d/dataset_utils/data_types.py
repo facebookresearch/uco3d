@@ -173,26 +173,6 @@ class Cameras:
         screen_points *= -1.0
         return screen_points
 
-    def _handle_focal_length(self, like: torch.Tensor) -> torch.Tensor:
-        return (
-            self.focal_length.to(like.device)
-            if torch.is_tensor(self.focal_length)
-            else (
-                like.new_tensor(
-                    self.focal_length
-                    if isinstance(self.focal_length, tuple)
-                    else (self.focal_length, self.focal_length)
-                )
-            )
-        )
-
-    def _handle_principal_point(self, like: torch.Tensor) -> torch.Tensor:
-        return (
-            self.principal_point.to(like.device)
-            if torch.is_tensor(self.principal_point)
-            else like.new_tensor(self.principal_point)
-        )
-
     def to_pytorch3d_cameras(self):
         if _NO_PYTORCH3D:
             raise ImportError(
@@ -212,6 +192,26 @@ class Cameras:
             in_ndc=self.in_ndc,
             device=self.device,
             image_size=self.image_size,
+        )
+
+    def _handle_focal_length(self, like: torch.Tensor) -> torch.Tensor:
+        return (
+            self.focal_length.to(like.device)
+            if torch.is_tensor(self.focal_length)
+            else (
+                like.new_tensor(
+                    self.focal_length
+                    if isinstance(self.focal_length, tuple)
+                    else (self.focal_length, self.focal_length)
+                )
+            )
+        )
+
+    def _handle_principal_point(self, like: torch.Tensor) -> torch.Tensor:
+        return (
+            self.principal_point.to(like.device)
+            if torch.is_tensor(self.principal_point)
+            else like.new_tensor(self.principal_point)
         )
 
 
