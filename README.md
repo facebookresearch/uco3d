@@ -279,7 +279,7 @@ The data are released under the [CC BY 4.0 license](LICENSE).
 
 # Reference
 If you use our dataset, please use the following citation:
-```
+```bibtex
 @inproceedings{liu24uco3d,
 	Author = {Liu, Xingchen and Tayal, Piyush and Wang, Jianyuan and Zarzar, Jesus and Monnier, Tom and Tertikas, Konstantinos and Duan, Jiali and Toisoul, Antoine and Zhang, Jason Y. and Neverova, Natalia and Vedaldi, Andrea and Shapovalov, Roman and Novotny, David},
 	Booktitle = {arXiv},
