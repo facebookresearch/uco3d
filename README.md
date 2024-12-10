@@ -2,9 +2,9 @@
 <img src="./uco3d_logo.png" width="600" />
 </center>
 
-# uCO3D Dataset
+# uCO3D: UnCommon Objects in 3D
 
-[[arXiv](TODO)] [[project page](TODO)]
+[[paper](TODO)] [[project page](TODO)]
 
 This repository contains download scripts and tooling for working with the **UnCommon Objects in 3D (uCO3D)** dataset.
 
@@ -17,12 +17,12 @@ The dataset is described in our paper ["UnCommon Objects in 3D"](TODO).
 </center>
 
 ## Main features
-- 170,000 videos scanning diverse objects from all directions.
-- Objects come from the LVIS taxonomy of ~1000 categories, grouped into 50 super-categories.
-- Each video is annotated with object segmentation, camera poses, and 3 types of point cloud.
-- The dataset newly contains a 3D Gaussian Splat reconstruction for each video.
+- **170,000 videos** scanning diverse objects from all directions.
+- Objects come from the LVIS taxonomy of **~1000 categories**, grouped into 50 super-categories.
+- Each video is annotated with object segmentation, camera poses, and **3 types of a point cloud**.
+- The dataset newly contains a **3D Gaussian Splat reconstruction for each video**.
 - Each scene contains a long and short caption obtained with a large video-language model.
-- Significantly improved annotation quality and size w.r.t. CO3Dv2
+- Significantly improved annotation quality and size w.r.t. CO3Dv2.
 
 # Download & Install
 
