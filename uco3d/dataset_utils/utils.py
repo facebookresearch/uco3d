@@ -43,7 +43,7 @@ def get_dataset_root(assert_exists: bool = False) -> str:
         if not os.path.exists(dataset_root):
             raise ValueError(
                 f"Environment variable {UCO3D_DATASET_ROOT_ENV_VAR} points"
-                " to a non-existing path."
+                f" to a non-existing path {dataset_root}."
             )
     return dataset_root
 

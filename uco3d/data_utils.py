@@ -8,8 +8,9 @@
 import logging
 import os
 
-import torch
+from typing import Optional
 
+import torch
 from uco3d.dataset_utils.frame_data import UCO3DFrameData
 from uco3d.uco3d_dataset import UCO3DDataset, UCO3DFrameDataBuilder
 
@@ -37,7 +38,7 @@ def get_all_load_dataset(
         A UCO3DDataset object.
     """
     dataset_root = get_dataset_root(assert_exists=True)
-    setlists_file = os.path.join(dataset_root, "set_lists_small.sqlite")
+    subset_lists_file = os.path.join(dataset_root, "set_lists_small.sqlite")
     frame_data_builder_kwargs = {
         **dict(
             apply_alignment=True,
@@ -52,8 +53,8 @@ def get_all_load_dataset(
             load_sparse_point_clouds=True,
             box_crop=True,
             load_frames_from_videos=True,
-            image_height=800,
-            image_width=800,
+            image_height=512,
+            image_width=512,
             undistort_loaded_blobs=True,
         ),
         **frame_data_builder_kwargs,
@@ -61,7 +62,7 @@ def get_all_load_dataset(
     frame_data_builder = UCO3DFrameDataBuilder(**frame_data_builder_kwargs)
     dataset_kwargs = {
         **dict(
-            subset_lists_file=setlists_file,
+            subset_lists_file=subset_lists_file,
             subsets=["train"],
             frame_data_builder=frame_data_builder,
         ),
