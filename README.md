@@ -12,12 +12,20 @@ This repository contains download scripts and classes to access the data.
 ===> TODO: Dataset GIF <===
 </center>
 
+## Main features
+- 170,000 videos scanning diverse objects from all directions.
+- Objects come from the LVIS taxonomy of ~1000 categories, grouped into 50 super-categories.
+- Each video is annotated with object segmentation, camera poses, and 3 types of point cloud.
+- The dataset newly contains a 3D Gaussian Splat reconstruction for each video.
+- Each scene contains a long and short caption obtained with a large video-language model.
+- Significantly improved annotation quality and size w.r.t. CO3Dv2
+
 # Download & Install
 
 The full dataset (processed version) takes **XXX GB of space**. We distribute it in chunks up to 20 GB.
 We provide an automated way of downloading and decompressing the data.
 
-First, run the install script that will take care of dependencies:
+First, run the install script that will also take care of dependencies:
 
 ```bash
 git clone git@github.com:facebookresearch/uco3d.git
@@ -59,7 +67,7 @@ Run `python dataset_download/download_dataset.py -h` for the full list of option
 
 # API Quick Start and Examples
 
-1) [Download the dataset and install the package](#download--install)
+1) [Download the dataset and install the `uco3d` package](#download--install)
 
 2) Setup the dataset root environment var
     ```bash
@@ -92,6 +100,7 @@ pointing to the root folder with the uCO3D dataset.
             load_segmented_point_clouds=True,
             load_sparse_point_clouds=True,
             box_crop=True,
+            box_crop_context=0.4,
             load_frames_from_videos=True,
             image_height=800,
             image_width=800,
@@ -105,8 +114,7 @@ pointing to the root folder with the uCO3D dataset.
     # obtain the 3D gaussian splats reconstructing the whole scene
     gaussian_splats = frame_data.sequence_gaussian_splats
     # render the scene gaussian splats into the camera of the loaded frame
-    # NOTE: This requires the 'gsplat' library. You can install
-    #       it with:
+    # NOTE: This requires the 'gsplat' library. You can install it with:
     #        > pip install git+https://github.com/nerfstudio-project/gsplat.git
     from uco3d import render_splats
     render_colors, render_alphas, render_info = render_splats(
