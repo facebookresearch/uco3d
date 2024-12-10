@@ -1,12 +1,16 @@
 <center>
-<img src="./uco3d_logo.png" width="400" />
+<img src="./uco3d_logo.png" width="600" />
 </center>
 
 # uCO3D Dataset
 
-uCO3D is a dataset of around 170,000 turn-tabe videos capturing objects load_frames_from_videos the LVIS taxonomy of object categories.
+[[arXiv](TODO)] [[project page](TODO)]
 
-This repository contains download scripts and classes to access the data.
+This repository contains download scripts and tooling for working with the **UnCommon Objects in 3D (uCO3D)** dataset.
+
+**uCO3D** contains ~170,000 turn-tabe videos capturing objects from the LVIS taxonomy of object categories.
+
+The dataset is described in our paper ["UnCommon Objects in 3D"](TODO).
 
 <center>
 ===> TODO: Dataset GIF <===
