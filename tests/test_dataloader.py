@@ -62,8 +62,13 @@ class TestDataloader(unittest.TestCase):
         for _ in dataloader:
             pass
 
-    def _test_depth_map_from_video(self):
+    def test_depth_map_from_video(self):
         depth_map_root = "/fsx-repligen/shared/datasets/uCO3D/temp_depth_check"
+        
+        if not os.path.exists(depth_map_root):
+            print("Skipping test_depth_map_from_video - depth_map_root does not exist")
+            return
+        
         dataset_depth = get_all_load_dataset(
             frame_data_builder_kwargs=dict(
                 apply_alignment=False,
@@ -83,7 +88,7 @@ class TestDataloader(unittest.TestCase):
                 undistort_loaded_blobs=True,
             )
         )
-        load_idx = [random.randint(0, len(dataset_depth)) for _ in range(10)]
+        load_idx = [random.randint(0, len(dataset_depth)) for _ in range(100)]
         for i in load_idx:
             frame_data = dataset_depth[i]
             depth_file_path = os.path.join(
@@ -104,6 +109,8 @@ class TestDataloader(unittest.TestCase):
             )
             depth_frame_video = frame_data.depth_map
             assert depth_frame_image.shape == depth_frame_video.shape
+            # df = (depth_frame_image-depth_frame_video).abs()
+            # print(float(df.max()), float(df.mean()))
             torch.allclose(depth_frame_image, depth_frame_video)
 
 

@@ -459,11 +459,14 @@ class UCO3DFrameDataBuilder:
         sequence_annotation: UCO3DSequenceAnnotation,
         fg_mask: Optional[np.ndarray],
     ) -> Tuple[torch.Tensor, str, torch.Tensor]:
+        time_0 = time.time()
         depth_h5_path = os.path.join(
             self.dataset_root,
             sequence_annotation.depth_video.path,
         )
         depth_h5_path_local = self._local_path(depth_h5_path)
+        if not os.path.isfile(depth_h5_path_local):
+            raise FileNotFoundError(f"Depth video {depth_h5_path} does not exist.")
         
         print("!!! REPLACE FRAME NUM PARSING WITH A MORE PRINCIPLED SOLUTION !!!")
         h5_frame_num = int(''.join(
@@ -475,6 +478,7 @@ class UCO3DFrameDataBuilder:
             assert fg_mask is not None
             depth_map *= fg_mask
         depth_mask = (depth_map > 0.0).float()
+        logger.debug(f"Depth H5 {depth_h5_path} time for reading is {time.time()-time_0}.")
         return depth_map, "", depth_mask
     
     def _frame_from_video(
