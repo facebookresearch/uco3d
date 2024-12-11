@@ -1,6 +1,6 @@
+import logging
 import os
 import unittest
-import logging
 
 logging.basicConfig(level=logging.INFO)
 
