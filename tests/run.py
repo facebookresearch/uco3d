@@ -4,7 +4,7 @@ import unittest
 
 if __name__ == "__main__":
     curdir = os.path.dirname(os.path.realpath(__file__))
-    if True:  # run a specific test
+    if False:  # run a specific test
         print("!!! REMOVE THIS !!!")
         suite = unittest.TestLoader().loadTestsFromName(
             # "test_gaussians_pcl.TestGaussiansPCL.test_visualize_gaussian_render"
