@@ -20,8 +20,8 @@ from testing_utils import fig_to_np_array, VISUALIZATION_DIR
 
 from tqdm import tqdm
 from uco3d.data_utils import get_all_load_dataset, load_whole_sequence
+from uco3d.dataset_utils.gauss3d_rendering import render_splats
 from uco3d.dataset_utils.gauss3d_utils import save_gsplat_ply
-from uco3d.dataset_utils.gauss_3d_rendering import render_splats
 
 
 class TestGaussiansPCL(unittest.TestCase):

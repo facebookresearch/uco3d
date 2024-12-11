@@ -14,7 +14,7 @@ import torch
 import torchvision
 
 from uco3d import GaussianSplats, UCO3DDataset, UCO3DFrameDataBuilder
-from uco3d.dataset_utils.gauss_3d_rendering import render_splats_opencv
+from uco3d.dataset_utils.gauss3d_rendering import render_splats_opencv
 from uco3d.dataset_utils.utils import get_dataset_root
 
 

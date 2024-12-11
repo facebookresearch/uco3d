@@ -1,3 +1,4 @@
+from .data_utils import get_all_load_dataset, load_whole_sequence  # noqa
 from .dataset_utils.annotation_types import (  # noqa
     DepthAnnotation,
     GaussianSplatsAnnotation,
@@ -15,7 +16,7 @@ from .dataset_utils.data_types import (  # noqa
     PointCloud,
 )
 from .dataset_utils.frame_data import UCO3DFrameData  # noqa
-from .dataset_utils.gauss_3d_rendering import render_splats  # noqa
+from .dataset_utils.gauss3d_rendering import render_splats, render_splats_opencv  # noqa
 from .dataset_utils.orm_types import (  # noqa
     UCO3DFrameAnnotation,
     UCO3DSequenceAnnotation,

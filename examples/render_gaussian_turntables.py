@@ -13,9 +13,13 @@ import numpy as np
 import torch
 import torchvision
 
-from uco3d import GaussianSplats, UCO3DDataset, UCO3DFrameDataBuilder
-from uco3d.dataset_utils.gauss_3d_rendering import render_splats_opencv
-from uco3d.dataset_utils.utils import get_dataset_root
+from uco3d import (
+    GaussianSplats,
+    get_all_load_dataset,
+    render_splats_opencv,
+    UCO3DDataset,
+    UCO3DFrameDataBuilder,
+)
 
 
 def main():
@@ -47,16 +51,27 @@ def main():
     os.makedirs(outroot, exist_ok=True)
 
     # obtain the dataset
-    dataset = _get_dataset()
+    dataset = get_all_load_dataset(
+        frame_data_builder_kwargs=dict(
+            load_gaussian_splats=True,
+            gaussian_splats_truncate_background=False,
+            apply_alignment=True,
+            # --- turn off all other data loading options ---
+            load_images=False,
+            load_depths=False,
+            load_masks=False,
+            load_depth_masks=False,
+            load_point_clouds=False,
+            load_segmented_point_clouds=False,
+            load_sparse_point_clouds=False,
+        )
+    )
 
     # sort the sequences based on the reconstruction quality score
     seq_annots = dataset.sequence_annotations()
-    sequence_name_to_score = dict(
-        zip(
-            seq_annots["sequence_name"],
-            seq_annots["_reconstruction_quality_gaussian_splats"],
-        )
-    )
+    sequence_name_to_score = {
+        sa.sequence_name: sa.reconstruction_quality.gaussian_splats for sa in seq_annots
+    }
     sequence_name_to_score = dict(
         sorted(
             sequence_name_to_score.items(),
@@ -69,7 +84,7 @@ def main():
     for seqi, seq_name in enumerate(sequence_name_to_score):
         if seqi >= int(args.num_scenes):
             break
-        print(f"{seq_name}: {sequence_name_to_score[seq_name]}")
+        print(f"Rendering {seq_name}: {sequence_name_to_score[seq_name]}")
         outfile = os.path.join(outroot, seq_name + ".mp4")
         dataset_idx = next(dataset.sequence_indices_in_order(seq_name))
         frame_data = dataset[dataset_idx]
@@ -173,41 +188,6 @@ def _generate_circular_path(
         torch.from_numpy(K).float(),
         torch.from_numpy(render_poses).float().inverse(),
     )
-
-
-def _get_dataset() -> UCO3DDataset:
-    dataset_root = get_dataset_root(assert_exists=True)
-    print("!!! REMOVE THIS !!!")
-    setlists_file = os.path.join(
-        dataset_root,
-        "set_lists_small.sqlite",
-    )
-    frame_data_builder_kwargs = dict(
-        dataset_root=dataset_root,
-        apply_alignment=True,
-        load_images=True,
-        load_depths=True,
-        load_masks=True,
-        load_depth_masks=True,
-        load_gaussian_splats=True,
-        gaussian_splats_truncate_background=False,
-        load_point_clouds=False,
-        load_segmented_point_clouds=False,
-        load_sparse_point_clouds=False,
-        box_crop=True,
-        load_frames_from_videos=True,
-        image_height=800,
-        image_width=800,
-        undistort_loaded_blobs=True,
-    )
-    frame_data_builder = UCO3DFrameDataBuilder(**frame_data_builder_kwargs)
-    dataset_kwargs = dict(
-        subset_lists_file=setlists_file,
-        subsets=["train"],
-        frame_data_builder=frame_data_builder,
-    )
-    dataset = UCO3DDataset(**dataset_kwargs)
-    return dataset
 
 
 if __name__ == "__main__":
