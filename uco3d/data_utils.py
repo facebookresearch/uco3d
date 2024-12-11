@@ -38,7 +38,11 @@ def get_all_load_dataset(
         A UCO3DDataset object.
     """
     dataset_root = get_dataset_root(assert_exists=True)
-    subset_lists_file = os.path.join(dataset_root, "set_lists_small.sqlite")
+    subset_lists_file = os.path.join(
+        dataset_root,
+        "set_lists",
+        "set_lists_small.sqlite",
+    )
     frame_data_builder_kwargs = {
         **dict(
             apply_alignment=True,

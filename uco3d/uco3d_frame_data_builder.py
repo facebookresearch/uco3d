@@ -204,9 +204,8 @@ class UCO3DFrameDataBuilder:
                 sequence_annotation.reconstruction_quality.gaussian_splats,
                 torch.float,
             ),
-            # TODO: add gaussian scores!
-            sequence_caption=sequence_annotation.sequence_caption,
-            sequence_short_caption=sequence_annotation.sequence_short_caption,
+            sequence_caption=sequence_annotation.caption.text,
+            sequence_short_caption=sequence_annotation.short_caption.text,
         )
 
         if frame_annotation.viewpoint is not None:
@@ -378,13 +377,12 @@ class UCO3DFrameDataBuilder:
         return frame_data
 
     def _apply_alignment_transform_(self, sequence_annotation, frame_data):
-        assert sequence_annotation.alignment_rotation is not None
-        assert sequence_annotation.alignment_translation is not None
-        R = torch.tensor(sequence_annotation.alignment_rotation, dtype=torch.float32)
-        T = torch.tensor(sequence_annotation.alignment_translation, dtype=torch.float32)
-        s = torch.tensor(
-            sequence_annotation.alignment_scale or 1.0, dtype=torch.float32
-        )
+        assert sequence_annotation.alignment is not None
+        assert sequence_annotation.alignment.R
+        assert sequence_annotation.alignment.T
+        R = torch.tensor(sequence_annotation.alignment.R, dtype=torch.float32)
+        T = torch.tensor(sequence_annotation.alignment.T, dtype=torch.float32)
+        s = torch.tensor(sequence_annotation.alignment.scale, dtype=torch.float32)
 
         # camera_before = copy.deepcopy(frame_data.camera)
 
@@ -464,22 +462,27 @@ class UCO3DFrameDataBuilder:
         sequence_annotation: UCO3DSequenceAnnotation,
         fg_mask: Optional[np.ndarray],
     ) -> Tuple[torch.Tensor, str, torch.Tensor]:
-        # depth video is 20 fps:
-        depth_video_timestamp = frame_annotation.frame_number / self.depth_video_fps
-        depth_video_path = self._local_path(sequence_annotation.depth_video.path)
-        depth_np = self._frame_from_video(
-            depth_video_path,
-            depth_video_timestamp,
+        import h5py
+        depth_h5_path = os.path.join(
+            self.dataset_root,
+            sequence_annotation.depth_video.path,
         )
-        if depth_np is None:
-            raise ValueError(f"Cannot load depth frame from {depth_video_path}")
-        depth_map = torch.from_numpy(depth_np[:1])
+        depth_h5_path_local = self._local_path(depth_h5_path)
+        
+        print("!!! REPLACE THIS WITH A MORE PRINCIPLED SOLUTION !!!")
+        h5_frame_num = int(''.join(
+            filter(str.isdigit, os.path.split(frame_annotation.image.path)[-1]))
+        )
+        assert h5_frame_num==(frame_annotation.frame_number + 1)
+        with h5py.File(depth_h5_path_local, 'r') as h5file:
+            depth_np = h5file[str(h5_frame_num)][:].astype(np.float32)
+        depth_map = torch.from_numpy(depth_np)[None]
         if self.mask_depths:
             assert fg_mask is not None
             depth_map *= fg_mask
         depth_mask = (depth_map > 0.0).float()
         return depth_map, "", depth_mask
-
+    
     def _frame_from_video(
         self, video_path: str | None, timestamp_sec: float
     ) -> np.ndarray | None:
