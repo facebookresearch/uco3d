@@ -10,17 +10,13 @@ import functools
 import logging
 import os
 import time
-import typing
 import warnings
-from dataclasses import asdict, dataclass
-from json import load
+from dataclasses import dataclass
 from typing import Any, Literal, Optional, Tuple
 
 import cv2
 import numpy as np
 import torch
-
-from plyfile import PlyData
 
 from .dataset_utils.data_types import Cameras, GaussianSplats, PointCloud
 from .dataset_utils.frame_data import UCO3DFrameData
@@ -38,6 +34,7 @@ from .dataset_utils.io_utils import (
     load_mask,
     load_point_cloud,
     transpose_normalize_image,
+    load_h5_depth,
 )
 
 from .dataset_utils.orm_types import UCO3DFrameAnnotation, UCO3DSequenceAnnotation
@@ -462,21 +459,18 @@ class UCO3DFrameDataBuilder:
         sequence_annotation: UCO3DSequenceAnnotation,
         fg_mask: Optional[np.ndarray],
     ) -> Tuple[torch.Tensor, str, torch.Tensor]:
-        import h5py
         depth_h5_path = os.path.join(
             self.dataset_root,
             sequence_annotation.depth_video.path,
         )
         depth_h5_path_local = self._local_path(depth_h5_path)
         
-        print("!!! REPLACE THIS WITH A MORE PRINCIPLED SOLUTION !!!")
+        print("!!! REPLACE FRAME NUM PARSING WITH A MORE PRINCIPLED SOLUTION !!!")
         h5_frame_num = int(''.join(
             filter(str.isdigit, os.path.split(frame_annotation.image.path)[-1]))
         )
         assert h5_frame_num==(frame_annotation.frame_number + 1)
-        with h5py.File(depth_h5_path_local, 'r') as h5file:
-            depth_np = h5file[str(h5_frame_num)][:].astype(np.float32)
-        depth_map = torch.from_numpy(depth_np)[None]
+        depth_map = load_h5_depth(depth_h5_path_local, h5_frame_num)[None]
         if self.mask_depths:
             assert fg_mask is not None
             depth_map *= fg_mask
@@ -494,7 +488,6 @@ class UCO3DFrameDataBuilder:
                 f"Cannot get a frame at a negative timestamp {timestamp_sec} s"
                 + f" from {video_path}."
             )
-            return None
         full_video_path = os.path.join(self.dataset_root, video_path)
         path = self._local_path(full_video_path)
         if not os.path.isfile(path):

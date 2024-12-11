@@ -10,6 +10,7 @@ import os
 import cv2
 import numpy as np
 import torch
+import h5py
 from PIL import Image
 from plyfile import PlyData
 
@@ -63,6 +64,13 @@ def load_16bit_png_depth(depth_png: str) -> np.ndarray:
             .reshape((depth_pil.size[1], depth_pil.size[0]))
         )
     return depth
+
+
+def load_h5_depth(path: str, frame_num: int):
+    with h5py.File(path, 'r') as h5file:
+        depth_np = h5file[str(frame_num)][:].astype(np.float32)
+    depth_map = torch.from_numpy(depth_np)
+    return depth_map
 
 
 def load_1bit_png_mask(file: str) -> np.ndarray:
