@@ -12,18 +12,17 @@ from uco3d import UCO3DDataset, UCO3DFrameDataBuilder
 
 
 def main():
-    outroot = os.path.join(
-        os.path.dirname(__file__),
-        "rendered_rotating_gaussians",
-    )
-    os.makedirs(outroot, exist_ok=True)
+    # dataset = get_dataset()
 
-    dataset = get_dataset()
-
-    _copy_dataset_to_target_dir(
-        dataset,
-        export_dataset_root="/fsx-repligen/dnovotny/datasets/uco3d_sample/",
-    )
+    export_dataset_root = "/fsx-repligen/dnovotny/datasets/uco3d_sample_v2_exported/"
+    # _copy_dataset_to_target_dir(
+    #     dataset,
+    #     export_dataset_root=export_dataset_root,
+    # )
+    
+    # send to aws
+    cmd = f"aws s3 sync {export_dataset_root} s3://genai-transfer/dnovotny/datasets/uco3d_sample_v2/"
+    os.system(cmd)
 
 
 def get_dataset() -> UCO3DDataset:
@@ -33,12 +32,13 @@ def get_dataset() -> UCO3DDataset:
     # )
     dataset_root = os.getenv(  # MAST
         "UCO3D_DATASET_ROOT",
-        "/home/dnovotny/data/uco3d_sample/",
+        "/home/dnovotny/data/uco3d_sample_v2/",
     )
-    metadata_file = os.path.join(dataset_root, "metadata_vgg_1128_test15.sqlite")
+    metadata_file = os.path.join(dataset_root, "metadata.sqlite")
     setlists_file = os.path.join(
         dataset_root,
-        "set_lists_allcat_val1100.sqlite",
+        "set_lists",
+        "set_lists_small.sqlite",
     )
     frame_data_builder_kwargs = dict(
         dataset_root=dataset_root,
@@ -60,10 +60,9 @@ def get_dataset() -> UCO3DDataset:
     )
     frame_data_builder = UCO3DFrameDataBuilder(**frame_data_builder_kwargs)
     dataset_kwargs = dict(
-        dataset_root=dataset_root,
         sqlite_metadata_file=metadata_file,
         subset_lists_file=setlists_file,
-        subsets=["train"],
+        subsets=["train", "val", "test"],
         frame_data_builder=frame_data_builder,
     )
     dataset = UCO3DDataset(**dataset_kwargs)
@@ -76,33 +75,20 @@ def _copy_dataset_to_target_dir(
     export_dataset_root: str,
 ):
     import shutil
-
     from tqdm import tqdm
-
     fls_to_copy = []
-    for seq_name in dataset.sequence_names():
-        for modality in [
-            "depth_videos",
-            "gaussian_splats",
-            "mask_videos",
-            "point_clouds",
-            "rgb_videos",
-            "segmented_point_clouds",
-            "sparse_point_clouds",
-        ]:
-            fls_to_copy.extend(
-                glob.glob(
-                    os.path.join(
-                        dataset.dataset_root,
-                        modality,
-                        seq_name,
-                        "*",
-                    )
-                )
-            )
-
+    for seq_annotation in dataset.sequence_annotations():
+        glob_stmt = os.path.join(
+            dataset.frame_data_builder.dataset_root,
+            os.path.dirname(seq_annotation.video.path),
+            "*",
+        )
+        fls_to_copy_now = glob.glob(glob_stmt)
+        fls_to_copy.extend(fls_to_copy_now)
+    
     fls_to_copy.append(os.path.join(dataset.sqlite_metadata_file))
     fls_to_copy.append(os.path.join(dataset.subset_lists_file))
+    fls_to_copy = sorted(list(set(fls_to_copy)))
 
     for fl in tqdm(fls_to_copy):
         tgt_file = fl.replace(
@@ -112,9 +98,9 @@ def _copy_dataset_to_target_dir(
         print(f"{fl}\n    -> {tgt_file}")
         os.makedirs(os.path.dirname(tgt_file), exist_ok=True)
         if os.path.isdir(fl):
-            shutil.copytree(fl, tgt_file)
+            shutil.copytree(fl, tgt_file, symlinks=False, copy_function=shutil.copy2)
         else:
-            shutil.copy(fl, tgt_file)
+            shutil.copy(fl, tgt_file, follow_symlinks=True)
 
 
 if __name__ == "__main__":

@@ -33,6 +33,7 @@ import sqlalchemy as sa
 import torch
 
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.expression import tuple_
 
 from .dataset_utils.frame_data import UCO3DFrameData
 from .dataset_utils.orm_types import UCO3DFrameAnnotation, UCO3DSequenceAnnotation
@@ -205,6 +206,10 @@ class UCO3DDataset:  # pyre-ignore
         return self._get_item(frame_idx, True)
 
     @property
+    def dataset_root(self):
+        return self.frame_data_builder.dataset_root
+
+    @property
     def meta(self):
         """
         Allows accessing metadata only without loading blobs using `dataset.meta[idx]`.
@@ -356,15 +361,46 @@ class UCO3DDataset:  # pyre-ignore
         for _, _, idx in self.sequence_frames_in_order(seq_name, subset_filter):
             yield idx
 
-    def sequence_annotations(self) -> pd.DataFrame:
+    def sequence_annotations(self) -> List[UCO3DSequenceAnnotation]:
+        """
+        Returns a list of UCO3DSequenceAnnotation objects with all sequence annotations.
+        """
+        sequence_names = set(self.sequence_names())
+        with sa.orm.Session(self._sql_engine) as session:
+            return session.query(
+                UCO3DSequenceAnnotation
+            ).where(UCO3DSequenceAnnotation.sequence_name.in_(
+                sequence_names
+            )).all()
+    
+    def sequence_annotations_dataframe(self) -> pd.DataFrame:
         """Returns a DataFrame with all sequence annotations."""
         stmt = sa.select(UCO3DSequenceAnnotation)
         with self._sql_engine.connect() as connection:
             return pd.read_sql(stmt, connection)
 
-    def frame_annotations(self) -> pd.DataFrame:
-        """Returns a DataFrame with all frame annotations."""
-        stmt = sa.select(UCO3DFrameAnnotation)
+    def frame_annotations(self) -> List[UCO3DFrameAnnotation]:
+        """
+        Returns a a list of UCO3DFrameAnnotation objects with all frame annotations.
+        """
+        frame_indices = set(self._index.index.values.tolist())
+        with sa.orm.Session(self._sql_engine) as session:
+            return session.query(
+                self.frame_annotations_type
+            ).filter(
+                tuple_(
+                    self.frame_annotations_type.sequence_name,
+                    self.frame_annotations_type.frame_number,
+                ).in_(
+                    frame_indices
+                )
+            ).all()
+            
+    def frame_annotations_dataframe(self) -> pd.DataFrame:
+        """
+        Returns a DataFrame with all frame annotations.
+        """
+        stmt = sa.select(self.frame_annotations_type)
         with self._sql_engine.connect() as connection:
             return pd.read_sql(stmt, connection)
 
