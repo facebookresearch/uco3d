@@ -8,9 +8,9 @@
 import os
 
 import cv2
+import h5py
 import numpy as np
 import torch
-import h5py
 from PIL import Image
 from plyfile import PlyData
 

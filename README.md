@@ -4,7 +4,7 @@
 
 # uCO3D: UnCommon Objects in 3D
 
-[[paper](TODO)] [[project page](TODO)]
+[[paper](TODO)] [[project page](https://uco3d.github.io)]
 
 This repository contains download scripts and tooling for working with the **UnCommon Objects in 3D (uCO3D)** dataset.
 
@@ -45,6 +45,8 @@ python dataset_download/download_dataset.py --download_folder <DESTINATION_FOLDE
 
 ## Download subsets of the dataset
 
+As detailed here, we allow users to download only specific subsets of the dataset (e.g. only Gaussian Splats and RGB videos of specific object categories). This allows to greatly decrease the amount of required space.
+
 ### Downloading specific modalities
 
 Setting `--download_modalities` to a comma-separated list of specific modality names will download only a subset of available modalities.
@@ -54,6 +56,10 @@ python dataset_download/download_dataset.py --download_folder <DESTINATION_FOLDE
 ```
 will only download rgb videos and point clouds.
 Execute `python dataset_download/download_dataset.py -h` for the list of all downloadable modalities.
+
+#### Dataset size per modality
+
+TODO
 
 ### Downloading specific categories or super-categories
 
@@ -280,6 +286,10 @@ will load the "train" subset of the `set_lists_all.sqlite` subset list which con
 # License
 
 The data are released under the [CC BY 4.0 license](LICENSE).
+
+# Third-Party Code
+
+This project uses code from other sources, which are licensed under their respective licenses.
 
 # Reference
 If you use our dataset, please use the following citation:

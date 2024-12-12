@@ -8,8 +8,6 @@
 import logging
 import os
 
-from typing import Optional
-
 import torch
 from uco3d.dataset_utils.frame_data import UCO3DFrameData
 from uco3d.uco3d_dataset import UCO3DDataset, UCO3DFrameDataBuilder

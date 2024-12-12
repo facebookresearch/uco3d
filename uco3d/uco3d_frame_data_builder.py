@@ -30,11 +30,11 @@ from .dataset_utils.gauss3d_utils import (
 from .dataset_utils.io_utils import (
     load_depth,
     load_depth_mask,
+    load_h5_depth,
     load_image,
     load_mask,
     load_point_cloud,
     transpose_normalize_image,
-    load_h5_depth,
 )
 
 from .dataset_utils.orm_types import UCO3DFrameAnnotation, UCO3DSequenceAnnotation
