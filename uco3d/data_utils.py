@@ -28,9 +28,9 @@ def get_all_load_dataset(
     Get a UCO3D dataset with all data loading flags set to True.
     Make sure to set the environment variable for UCO3D_DATASET_ROOT
     to the root of the dataset.
-    
+
     Note:
-        By default the code loads the small debug subset of uCO3D. 
+        By default the code loads the small debug subset of uCO3D.
         Make sure to set dataset_kwargs correctly if you wish to load
         a bigger dataset instead. E.g., the following will load the
         whole dataset:

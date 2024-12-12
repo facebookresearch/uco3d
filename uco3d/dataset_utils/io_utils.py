@@ -67,7 +67,7 @@ def load_16bit_png_depth(depth_png: str) -> np.ndarray:
 
 
 def load_h5_depth(path: str, frame_num: int):
-    with h5py.File(path, 'r') as h5file:
+    with h5py.File(path, "r") as h5file:
         depth_np = h5file[str(frame_num)][:].astype(np.float32)
     depth_map = torch.from_numpy(depth_np)
     return depth_map

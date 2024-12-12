@@ -19,7 +19,7 @@ def main():
     #     dataset,
     #     export_dataset_root=export_dataset_root,
     # )
-    
+
     # send to aws
     cmd = f"aws s3 sync {export_dataset_root} s3://genai-transfer/dnovotny/datasets/uco3d_sample_v2/"
     os.system(cmd)
@@ -76,6 +76,7 @@ def _copy_dataset_to_target_dir(
 ):
     import shutil
     from tqdm import tqdm
+
     fls_to_copy = []
     for seq_annotation in dataset.sequence_annotations():
         glob_stmt = os.path.join(
@@ -85,7 +86,7 @@ def _copy_dataset_to_target_dir(
         )
         fls_to_copy_now = glob.glob(glob_stmt)
         fls_to_copy.extend(fls_to_copy_now)
-    
+
     fls_to_copy.append(os.path.join(dataset.sqlite_metadata_file))
     fls_to_copy.append(os.path.join(dataset.subset_lists_file))
     fls_to_copy = sorted(list(set(fls_to_copy)))

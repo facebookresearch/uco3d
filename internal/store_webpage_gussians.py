@@ -22,12 +22,12 @@ def _crop_mask_to_center_offsets(crop_mask):
     max_y = crop_mask.min(dim=0).indices.unique()
     assert len(max_x) == 1
     assert len(max_y) == 1
-    if max_x==0:
+    if max_x == 0:
         max_x = crop_mask.shape[1]
-    elif max_y==0:
+    elif max_y == 0:
         max_y = crop_mask.shape[0]
     else:
-        raise ValueError("Crop mask is not a rectangle")  
+        raise ValueError("Crop mask is not a rectangle")
     #     offs_top = (crop_mask.shape[0] - max_y)//2
     #     offs_bot = crop_mask.shape[0]-max_y-offs_top
     #     assert offs_top+offs_bot+max_y == crop_mask.shape[0]
@@ -41,12 +41,12 @@ def _crop_mask_to_center_offsets(crop_mask):
     #     width = crop_mask.shape[1] - max_x
     # else:
     #     raise ValueError("Crop mask is not a rectangle")
-    offs_top = (crop_mask.shape[0] - max_y)//2
-    offs_bot = crop_mask.shape[0]-max_y-offs_top
-    offs_left = (crop_mask.shape[1] - max_x)//2
-    offs_right = crop_mask.shape[1]-max_x-offs_left
-    assert offs_top+offs_bot+max_y == crop_mask.shape[0]
-    assert offs_left+offs_right+max_x == crop_mask.shape[1]
+    offs_top = (crop_mask.shape[0] - max_y) // 2
+    offs_bot = crop_mask.shape[0] - max_y - offs_top
+    offs_left = (crop_mask.shape[1] - max_x) // 2
+    offs_right = crop_mask.shape[1] - max_x - offs_left
+    assert offs_top + offs_bot + max_y == crop_mask.shape[0]
+    assert offs_left + offs_right + max_x == crop_mask.shape[1]
     height = max_y
     width = max_x
     return offs_top, height, offs_left, width
@@ -74,14 +74,14 @@ seq_names = dataset.sequence_names()
 for seq_name in tqdm(seq_names[1:]):
     i = next(dataset.sequence_indices_in_order(seq_name))
     entry = dataset[i]
-    
+
     outfile_thumb = os.path.join(
         outdir,
         f"{entry.sequence_name}.png",
     )
     # store thumbnail
     print(os.path.abspath(outfile_thumb))
-    
+
     im = entry.image_rgb
     crop_mask = entry.mask_crop[0]
     # get the boundaries of the crop mask
@@ -89,29 +89,29 @@ for seq_name in tqdm(seq_names[1:]):
     im_center = torch.ones_like(im)
     im_center[
         :,
-        offs_top:offs_top+height,
-        offs_left:offs_left+width,
+        offs_top : offs_top + height,
+        offs_left : offs_left + width,
     ] = entry.image_rgb[
         :,
         :height,
         :width,
     ]
-    
+
     torchvision.utils.save_image(
         im_center,
         outfile_thumb,
     )
-    
-    # store caption 
+
+    # store caption
     outfile_caption = os.path.join(
         outdir,
         f"{entry.sequence_name}.caption",
     )
     with open(outfile_caption, "w") as f:
         f.write(entry.sequence_short_caption)
-        
+
     continue
-    
+
     outfile = os.path.join(
         outdir,
         f"{entry.sequence_name}.ply",
@@ -127,7 +127,7 @@ for seq_name in tqdm(seq_names[1:]):
     splats_truncated = type(entry.sequence_gaussian_splats)(
         **{k: v[ok] for k, v in dct.items() if v is not None}
     )
-    
+
     # flip upside down
     splats_truncated = transform_gaussian_splats(
         splats_truncated,
@@ -141,8 +141,7 @@ for seq_name in tqdm(seq_names[1:]):
         ),
         s=torch.tensor((1.0,)),
     )
-    
+
     # store splats
     print(os.path.abspath(outfile))
     save_gsplat_ply(splats_truncated, outfile)
-    

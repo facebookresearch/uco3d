@@ -374,10 +374,14 @@ class TestGaussiansPCL(unittest.TestCase):
             )
             # truncate points outside a given spherical boundary:
             if entry.sequence_gaussian_splats.fg_mask is None:
-                fg_mask = torch.ones(entry.sequence_gaussian_splats.means.shape[0], dtype=bool)
+                fg_mask = torch.ones(
+                    entry.sequence_gaussian_splats.means.shape[0], dtype=bool
+                )
             else:
                 fg_mask = entry.sequence_gaussian_splats.fg_mask
-            centroid = entry.sequence_gaussian_splats.means[fg_mask].mean(dim=0, keepdim=True)
+            centroid = entry.sequence_gaussian_splats.means[fg_mask].mean(
+                dim=0, keepdim=True
+            )
             ok = (entry.sequence_gaussian_splats.means - centroid).norm(dim=1) < 4.5
             dct = dataclasses.asdict(entry.sequence_gaussian_splats)
             splats_truncated = type(entry.sequence_gaussian_splats)(

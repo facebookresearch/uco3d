@@ -367,12 +367,12 @@ class UCO3DDataset:  # pyre-ignore
         """
         sequence_names = set(self.sequence_names())
         with sa.orm.Session(self._sql_engine) as session:
-            return session.query(
-                UCO3DSequenceAnnotation
-            ).where(UCO3DSequenceAnnotation.sequence_name.in_(
-                sequence_names
-            )).all()
-    
+            return (
+                session.query(UCO3DSequenceAnnotation)
+                .where(UCO3DSequenceAnnotation.sequence_name.in_(sequence_names))
+                .all()
+            )
+
     def sequence_annotations_dataframe(self) -> pd.DataFrame:
         """Returns a DataFrame with all sequence annotations."""
         stmt = sa.select(UCO3DSequenceAnnotation)
@@ -385,17 +385,17 @@ class UCO3DDataset:  # pyre-ignore
         """
         frame_indices = set(self._index.index.values.tolist())
         with sa.orm.Session(self._sql_engine) as session:
-            return session.query(
-                self.frame_annotations_type
-            ).filter(
-                tuple_(
-                    self.frame_annotations_type.sequence_name,
-                    self.frame_annotations_type.frame_number,
-                ).in_(
-                    frame_indices
+            return (
+                session.query(self.frame_annotations_type)
+                .filter(
+                    tuple_(
+                        self.frame_annotations_type.sequence_name,
+                        self.frame_annotations_type.frame_number,
+                    ).in_(frame_indices)
                 )
-            ).all()
-            
+                .all()
+            )
+
     def frame_annotations_dataframe(self) -> pd.DataFrame:
         """
         Returns a DataFrame with all frame annotations.

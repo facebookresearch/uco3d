@@ -467,20 +467,22 @@ class UCO3DFrameDataBuilder:
         depth_h5_path_local = self._local_path(depth_h5_path)
         if not os.path.isfile(depth_h5_path_local):
             raise FileNotFoundError(f"Depth video {depth_h5_path} does not exist.")
-        
+
         print("!!! REPLACE FRAME NUM PARSING WITH A MORE PRINCIPLED SOLUTION !!!")
-        h5_frame_num = int(''.join(
-            filter(str.isdigit, os.path.split(frame_annotation.image.path)[-1]))
+        h5_frame_num = int(
+            "".join(filter(str.isdigit, os.path.split(frame_annotation.image.path)[-1]))
         )
-        assert h5_frame_num==(frame_annotation.frame_number + 1)
+        assert h5_frame_num == (frame_annotation.frame_number + 1)
         depth_map = load_h5_depth(depth_h5_path_local, h5_frame_num)[None]
         if self.mask_depths:
             assert fg_mask is not None
             depth_map *= fg_mask
         depth_mask = (depth_map > 0.0).float()
-        logger.debug(f"Depth H5 {depth_h5_path} time for reading is {time.time()-time_0}.")
+        logger.debug(
+            f"Depth H5 {depth_h5_path} time for reading is {time.time()-time_0}."
+        )
         return depth_map, "", depth_mask
-    
+
     def _frame_from_video(
         self, video_path: str | None, timestamp_sec: float
     ) -> np.ndarray | None:
