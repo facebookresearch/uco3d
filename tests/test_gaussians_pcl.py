@@ -361,6 +361,7 @@ class TestGaussiansPCL(unittest.TestCase):
             frame_data_builder_kwargs=dict(
                 apply_alignment=True,
                 load_gaussian_splats=True,
+                gaussian_splats_truncate_background=False,
             )
         )
         forked_random = random.Random(42)
