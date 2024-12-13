@@ -38,7 +38,7 @@ def get_all_load_dataset(
                 "subset_lists_file": os.path.join(
                     dataset_root,
                     "set_lists",
-                    "set_lists_all.sqlite",
+                    "set_lists_all-categories.sqlite",
                 ),
             },
             frame_data_builder_kwargs={},
@@ -58,7 +58,7 @@ def get_all_load_dataset(
     subset_lists_file = os.path.join(
         dataset_root,
         "set_lists",
-        "set_lists_small.sqlite",
+        "set_lists_3categories-debug.sqlite",
     )
     frame_data_builder_kwargs = {
         **dict(

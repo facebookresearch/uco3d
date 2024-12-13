@@ -175,40 +175,6 @@ def _generate_circular_path(
     )
 
 
-def _get_dataset() -> UCO3DDataset:
-    dataset_root = get_dataset_root(assert_exists=True)
-    print("!!! REMOVE THIS !!!")
-    setlists_file = os.path.join(
-        dataset_root,
-        "set_lists_small.sqlite",
-    )
-    frame_data_builder_kwargs = dict(
-        dataset_root=dataset_root,
-        apply_alignment=True,
-        load_images=True,
-        load_depths=True,
-        load_masks=True,
-        load_depth_masks=True,
-        load_gaussian_splats=True,
-        gaussian_splats_truncate_background=False,
-        load_point_clouds=False,
-        load_segmented_point_clouds=False,
-        load_sparse_point_clouds=False,
-        box_crop=True,
-        load_frames_from_videos=True,
-        image_height=800,
-        image_width=800,
-        undistort_loaded_blobs=True,
-    )
-    frame_data_builder = UCO3DFrameDataBuilder(**frame_data_builder_kwargs)
-    dataset_kwargs = dict(
-        subset_lists_file=setlists_file,
-        subsets=["train"],
-        frame_data_builder=frame_data_builder,
-    )
-    dataset = UCO3DDataset(**dataset_kwargs)
-    return dataset
-
-
 if __name__ == "__main__":
+    raise NotImplementedError("Finish this!")
     main()

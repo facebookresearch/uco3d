@@ -93,8 +93,12 @@ pointing to the root folder with the uCO3D dataset.
     dataset_root = get_dataset_root(assert_exists=True)
     # Get the "small" subset list containing a small subset
     # of the uCO3D categories. For loading the whole dataset
-    # use "set_lists_all.sqlite".
-    subset_lists_file = os.path.join(dataset_root, "set_lists", "set_lists_small.sqlite")
+    # use "set_lists_all-categories.sqlite".
+    subset_lists_file = os.path.join(
+        dataset_root,
+        "set_lists", 
+        "set_lists_3categories-debug.sqlite",
+    )
     dataset = UCO3DDataset(
         subset_lists_file=subset_lists_file,
         subsets=["train"],
@@ -158,8 +162,8 @@ The dataset is organized in the filesystem as follows:
 ```
 ├── metadata.sqlite
 ├── set_lists
-│   ├── set_lists_all.sqlite
-│   ├── set_lists_static.sqlite
+│   ├── set_lists_3categories-debug.sqlite
+│   ├── set_lists_all-categories.sqlite
 │   ├── set_lists_<subset_lists_name_2>.sqlite
 │   ├── ...
 ├── <super_category_1>
@@ -269,19 +273,28 @@ The subset lists files:
 ```bash
 $UCO3D_DATASET_ROOT/set_lists/set_lists_<SETLIST_NAME>.sqlite
 ```
-definine dataset splits. Specifically, each file contains a list of frames (identified with their `sequence_name` and `frame_number`) in the "train", "val", and "test" subsets of the dataset.
+definine dataset splits. Specifically, each file contains a list of frames (identified with their `sequence_name` and `frame_number`) in the "train" and "val" subsets of the dataset.
 
 In order to select a specific subset of the dataset, one passes the correct subset list path, and the subset name to the constructore of `UCO3DDataset`.
 
 For instance
 ```python
 dataset = UCO3DDataset(
-    subset_lists_file="<UCO3D_DATASET_ROOT>/set_lists/set_lists_all.sqlite",
+    subset_lists_file="<UCO3D_DATASET_ROOT>/set_lists/set_lists_all-categories.sqlite",
     subsets=["train"],
     frame_data_builder=...,
 )
 ```
-will load the "train" subset of the `set_lists_all.sqlite` subset list which contains the whole uCO3D dataset.
+will load the "train" subset of the `set_lists_all-categories.sqlite` subset list which contains the whole uCO3D dataset.
+
+### Available subset lists
+
+The folder `<UCO3D_DATASET_ROOT>/set_lists/` provides the following subset lists:
+- **set_lists_3categories-debug.sqlite** - A small split for debugging purposes. Very fast to load allowing fast iteration on the code using the dataset.
+- **set_lists_all-categories.sqlite** - Contains the whole dataset.
+- **set_lists_static-categories.sqlite** - Contains the videos of all rigid categories of uCO3D.
+- **set_lists_static-categories-accurate-reconstruction.sqlite** - Contains the videos of all rigid categories of uCO3D with high-quality reconstructions.
+- **set_lists_dynamic-categories.sqlite** - Contains the videos of all flexible categories (e.g. animals) of uCO3D.
 
 # License
 
