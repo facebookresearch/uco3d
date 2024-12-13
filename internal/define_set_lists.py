@@ -6,10 +6,22 @@ import sqlite3
 metadata = "/fsx-repligen/shared/datasets/uCO3D/dataset_export/metadata_vgg_1212_166k.sqlite"
 setlists = "/fsx-repligen/shared/datasets/uCO3D/dataset_export/set_lists_allcat_val1100_dec12.sqlite"
 
-def dump_df_to_sqlite(df, output_path, table_name: str = "set_lists"):
+def dump_df_to_sqlite(df, output_path, table_name: str = "set_lists", table_name_length="sequence_lengths"):
     engine = sa.create_engine(f"sqlite:///{output_path}")
 
     res = df.to_sql(table_name, engine, index=False, if_exists="fail")
+
+    sequence_lengths = (
+        df_setlists
+        .groupby(['sequence_name', 'subset'], as_index=False)
+        .agg(num_frames=('frame_number', 'size'))
+        .sort_values(by=['sequence_name', 'subset'])
+        .reset_index(drop=True)
+    )
+    if categories is not None:
+        sequence_lengths["category"] = sequence_lengths["sequence_name"].map(categories)
+        sequence_lengths["super_category"] = sequence_lengths["sequence_name"].map(super_categories)
+    sequence_lengths.to_sql(table_name_length, engine, index=False, if_exists="fail")
 
     with sqlite3.connect(output_path) as conn:
         cursor = conn.cursor()
@@ -69,31 +81,41 @@ if __name__ == "__main__":
         # Read the data into a pandas DataFrame
         sequence_annots = pd.read_sql_query(query, conn)
 
-    alex_setlists_trainval = alex_setlists[alex_setlists["subset"] != "test"]
+    with open("/fsx-repligen/shared/datasets/uCO3D/tool/id_category.json") as f:
+        categories_json = json.load(f)
+    categories = {k: v['category'] for k, v in categories_json.items()}
+    super_categories = {k: v['super_group'] for k, v in categories_json.items()}
 
     with open("/fsx-repligen/dnovotny/datasets/uCO3D/canonical_renders/v1_segmented=False/scene_to_score.json") as f:
         scores = json.load(f)
 
+    print("Loading done")
+
+    sequence_annots["score"] = sequence_annots["sequence_name"].map(scores).fillna(0.0)
+
     result = get_subsets(sequence_annots)
+    alex_setlists_trainval = alex_setlists[alex_setlists["subset"] != "test"]
+
+    print("Subsets done. Dumping")
 
     df_setlists = dump_subset(alex_setlists_trainval, result["debug_train"], result["debug_val"])
-    dump_df_to_sqlite(df_setlists, f"/fsx-repligen/shared/datasets/uCO3D/dataset_export/set_lists/set_lists_3cat_debug.sqlite")
+    dump_df_to_sqlite(df_setlists, f"/fsx-repligen/shared/datasets/uCO3D/dataset_export/set_lists/set_lists_3categories-debug.sqlite")
 
-    df_setlists = dump_subset(alex_setlists_trainval, result["static_train"], result["static_val_diverse"])
-    dump_df_to_sqlite(df_setlists, f"/fsx-repligen/shared/datasets/uCO3D/dataset_export/set_lists/set_lists_static_diverse_val.sqlite")
+    # df_setlists = dump_subset(alex_setlists_trainval, result["static_train"], result["static_val_diverse"])
+    # dump_df_to_sqlite(df_setlists, f"/fsx-repligen/shared/datasets/uCO3D/dataset_export/set_lists/set_lists_static_diverse_val.sqlite")
 
     df_setlists = dump_subset(alex_setlists_trainval, result["static_train"], result["static_val_diverse"] + result["static_val_random"])
-    dump_df_to_sqlite(df_setlists, f"/fsx-repligen/shared/datasets/uCO3D/dataset_export/set_lists/set_lists_static_all_val.sqlite")
+    dump_df_to_sqlite(df_setlists, f"/fsx-repligen/shared/datasets/uCO3D/dataset_export/set_lists/set_lists_static-categories.sqlite")
 
     df_setlists = dump_subset(alex_setlists_trainval, result["dynamic_train"], result["dynamic_val"])
-    dump_df_to_sqlite(df_setlists, f"/fsx-repligen/shared/datasets/uCO3D/dataset_export/set_lists/set_lists_dynamic.sqlite")
+    dump_df_to_sqlite(df_setlists, f"/fsx-repligen/shared/datasets/uCO3D/dataset_export/set_lists/set_lists_dynamic-categories.sqlite")
 
     df_setlists = dump_subset(
         alex_setlists_trainval, result["static_train"] + result["dynamic_train"], result["static_val_diverse"] + result["static_val_random"] + result["dynamic_val"]
     )
-    dump_df_to_sqlite(df_setlists, f"/fsx-repligen/shared/datasets/uCO3D/dataset_export/set_lists/set_lists_all_data.sqlite")
+    dump_df_to_sqlite(df_setlists, f"/fsx-repligen/shared/datasets/uCO3D/dataset_export/set_lists/set_lists_all-categories.sqlite")
 
     df_setlists = dump_subset(
         alex_setlists_trainval, result["static_train_best"], result["static_val_diverse"] + result["static_val_random"]
     )
-    dump_df_to_sqlite(df_setlists, f"/fsx-repligen/shared/datasets/uCO3D/dataset_export/set_lists/set_lists_static_hq_all_val.sqlite")
+    dump_df_to_sqlite(df_setlists, f"/fsx-repligen/shared/datasets/uCO3D/dataset_export/set_lists/set_lists_static-categories-accurate-reconstruction.sqlite")
