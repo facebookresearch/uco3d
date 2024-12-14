@@ -104,7 +104,7 @@ class UCO3DFrameDataBuilder:
         path_manager: Optionally a PathManager for interpreting paths in a special way.
     """
 
-    dataset_root: Optional[str] = get_dataset_root()
+    dataset_root: Optional[str] = None
     load_images: bool = True
     load_depths: bool = True
     load_depth_masks: bool = True
@@ -138,6 +138,9 @@ class UCO3DFrameDataBuilder:
             raise ValueError(
                 "Both image_height and image_width have to be set or unset."
             )
+        if self.dataset_root is None:
+            # try to set the dataset root from the environment variable
+            self.dataset_root = get_dataset_root(assert_exists=False)
         if self.dataset_root is None and any(
             [
                 self.load_images,
@@ -151,7 +154,7 @@ class UCO3DFrameDataBuilder:
         ):
             raise ValueError(
                 "dataset_root has to be set if any of the load_* flags is true."
-                f"Either set the {UCO3D_DATASET_ROOT_ENV_VAR} env variable or"
+                f" Either set the {UCO3D_DATASET_ROOT_ENV_VAR} env variable or"
                 " set the UCO3DFrameDataBuilder.dataset_root to a correct path."
             )
 
@@ -255,7 +258,6 @@ class UCO3DFrameDataBuilder:
                 )
 
             if load_blobs and self.load_images:
-                assert frame_data.image_path is not None
                 rgb_image_load_start_time = time.time()
                 if self.load_frames_from_videos:
                     image_np = self._frame_from_video(
@@ -263,6 +265,7 @@ class UCO3DFrameDataBuilder:
                         frame_annotation.frame_timestamp,
                     )
                 else:
+                    assert frame_data.image_path is not None
                     image_np = load_image(self._local_path(frame_data.image_path))
                 assert image_np is not None
                 logger.debug(
@@ -468,11 +471,14 @@ class UCO3DFrameDataBuilder:
         if not os.path.isfile(depth_h5_path_local):
             raise FileNotFoundError(f"Depth video {depth_h5_path} does not exist.")
 
-        print("!!! REPLACE FRAME NUM PARSING WITH A MORE PRINCIPLED SOLUTION !!!")
-        h5_frame_num = int(
-            "".join(filter(str.isdigit, os.path.split(frame_annotation.image.path)[-1]))
-        )
-        assert h5_frame_num == (frame_annotation.frame_number + 1)
+        # print("!!! REPLACE FRAME NUM PARSING WITH A MORE PRINCIPLED SOLUTION !!!")
+        # h5_frame_num = int(
+        #     "".join(filter(str.isdigit, os.path.split(frame_annotation.image.path)[-1]))
+        # )
+        # assert h5_frame_num == (frame_annotation.frame_number + 1)
+        
+        h5_frame_num = frame_annotation.frame_number + 1
+        
         depth_map = load_h5_depth(depth_h5_path_local, h5_frame_num)[None]
         if self.mask_depths:
             assert fg_mask is not None

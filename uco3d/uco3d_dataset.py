@@ -45,13 +45,6 @@ logger = logging.getLogger(__name__)
 
 _SET_LISTS_TABLE: str = "set_lists"
 
-_DEFAULT_DATASET_ROOT: str = get_dataset_root(assert_exists=False)
-_DEFAULT_SQLITE_METADATA_FILE: str = (
-    os.path.join(_DEFAULT_DATASET_ROOT, "metadata.sqlite")
-    if _DEFAULT_DATASET_ROOT is not None
-    else "<UNKNOWN>"
-)
-
 
 @dataclass
 class UCO3DDataset:  # pyre-ignore
@@ -119,7 +112,7 @@ class UCO3DDataset:  # pyre-ignore
     # frame data builder
     frame_data_builder: Optional[UCO3DFrameDataBuilder] = None
 
-    sqlite_metadata_file: str = _DEFAULT_SQLITE_METADATA_FILE
+    sqlite_metadata_file: Optional[str] = None
     subset_lists_file: Optional[str] = None
     eval_batches_file: Optional[str] = None
     path_manager: Any = None
@@ -144,8 +137,28 @@ class UCO3DDataset:  # pyre-ignore
     def __post_init__(self) -> None:
         if sa.__version__ < "2.0":
             raise ImportError("This class requires SQL Alchemy 2.0 or later")
-        if not self.sqlite_metadata_file:
-            raise ValueError("sqlite_metadata_file must be set")
+        
+        if self.sqlite_metadata_file is None:
+            # Attempt to set the sqlite_metadata_file from the dataset root.
+            # fFrst we need the dataset root, either take from the frame_data_builder
+            # or from the environment variable.
+            dataset_root = (
+                get_dataset_root()
+                if self.dataset_root is None
+                else self.dataset_root
+            )
+            # Then we point to the default "metadata.sqlite" file in dataset_root.
+            if dataset_root is not None and os.path.exists(dataset_root):
+                self.sqlite_metadata_file = os.path.join(
+                    dataset_root, "metadata.sqlite"
+                )
+            else:
+                raise ValueError(
+                    "sqlite_metadata_file must be set or the file"
+                    " $UCO3D_DATASET_ROOT/metadata.sqlite must exist."
+                    " Either set sqlite_metadata_file or UCO3D_DATASET_ROOT."
+                )
+            
         if not os.path.exists(self.sqlite_metadata_file):
             raise FileNotFoundError(
                 f"sqlite_metadata_file {self.sqlite_metadata_file} not found"
@@ -164,6 +177,12 @@ class UCO3DDataset:  # pyre-ignore
         sequences = self._get_filtered_sequences_if_any()
 
         if self.subsets:
+            if self.subset_lists_file is None:
+                raise ValueError(
+                    "`subsets` is set but `subset_lists_file` is not set. "
+                    + "Either provide the self.subset_lists_file to load, or "
+                    + "set self.subsets=None."
+                )
             index = self._build_index_from_subset_lists(sequences)
         else:
             if self.subset_lists_file is not None:
@@ -175,7 +194,8 @@ class UCO3DDataset:  # pyre-ignore
             # TODO: if self.subset_lists_file and not self.subsets, it might be faster to
             # still use the concatenated lists, assuming they cover the whole dataset
             warnings.warn(
-                "Loading the whole uCO3D database takes a long time."
+                "Detected self.subsets is None and self.subset_lists_file is None."
+                + " This will load the whole uCO3D database which takes a long time."
                 + " If possible, consider setting `subsets`, and defining a "
                 + " `subset_lists_file` to speed up the loading process."
             )
@@ -256,11 +276,11 @@ class UCO3DDataset:  # pyre-ignore
             raise ValueError(
                 "self.frame_data_builder must be set to enable data fetching."
             )
-
+            
         if isinstance(frame_idx, int):
             if frame_idx >= len(self._index):
                 raise IndexError(f"index {frame_idx} out of range {len(self._index)}")
-
+            
             seq, frame = self._index.index[frame_idx]
         elif isinstance(frame_idx, (tuple, list)):
             seq, frame, *rest = frame_idx

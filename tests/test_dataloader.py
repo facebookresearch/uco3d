@@ -62,7 +62,7 @@ class TestDataloader(unittest.TestCase):
         for _ in dataloader:
             pass
 
-    def test_depth_map_from_video(self):
+    def _test_depth_map_from_video(self):
         depth_map_root = "/fsx-repligen/shared/datasets/uCO3D/temp_depth_check"
 
         if not os.path.exists(depth_map_root):

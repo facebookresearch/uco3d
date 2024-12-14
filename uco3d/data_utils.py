@@ -53,13 +53,6 @@ def get_all_load_dataset(
     Returns:
         A UCO3DDataset object.
     """
-    dataset_root = get_dataset_root(assert_exists=True)
-    # default subset lists is the small one
-    subset_lists_file = os.path.join(
-        dataset_root,
-        "set_lists",
-        "set_lists_3categories-debug.sqlite",
-    )
     frame_data_builder_kwargs = {
         **dict(
             apply_alignment=True,
@@ -80,6 +73,16 @@ def get_all_load_dataset(
         ),
         **frame_data_builder_kwargs,
     }
+    # get the dataset root, either first from the kwargs, then from the env
+    dataset_root = frame_data_builder_kwargs.get("dataset_root", None)
+    if dataset_root is None:
+        dataset_root = get_dataset_root(assert_exists=True)
+    # default subset lists is the small one
+    subset_lists_file = os.path.join(
+        dataset_root,
+        "set_lists",
+        "set_lists_3categories-debug.sqlite",
+    )
     frame_data_builder = UCO3DFrameDataBuilder(**frame_data_builder_kwargs)
     dataset_kwargs = {
         **dict(
