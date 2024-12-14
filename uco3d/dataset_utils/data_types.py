@@ -350,6 +350,9 @@ class GaussianSplats:
     quats: torch.Tensor
     shN: Optional[torch.Tensor] = None
     fg_mask: Optional[torch.Tensor] = None
+    
+    def __len__(self):
+        return self.means.shape[0]
 
 
 def join_uco3d_cameras_as_batch(cameras_list: Sequence[Cameras]) -> Cameras:

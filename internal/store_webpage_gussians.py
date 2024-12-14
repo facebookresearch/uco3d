@@ -10,7 +10,7 @@ import os
 import torch
 import torchvision
 from tqdm import tqdm
-from uco3d.data_utils import get_all_load_dataset
+from uco3d.data_utils import get_all_load_dataset, get_dataset_root
 from uco3d.dataset_utils.gauss3d_utils import (
     save_gsplat_ply,
     transform_gaussian_splats,
@@ -18,16 +18,14 @@ from uco3d.dataset_utils.gauss3d_utils import (
 
 
 def _crop_mask_to_center_offsets(crop_mask):
-    max_x = crop_mask.min(dim=1).indices.unique()
-    max_y = crop_mask.min(dim=0).indices.unique()
-    assert len(max_x) == 1
-    assert len(max_y) == 1
+    max_x = crop_mask.min(dim=1).indices.max()
+    max_y = crop_mask.min(dim=0).indices.max()
     if max_x == 0:
         max_x = crop_mask.shape[1]
-    elif max_y == 0:
+    if max_y == 0:
         max_y = crop_mask.shape[0]
-    else:
-        raise ValueError("Crop mask is not a rectangle")
+    # else:
+    #     raise ValueError("Crop mask is not a rectangle")
     #     offs_top = (crop_mask.shape[0] - max_y)//2
     #     offs_bot = crop_mask.shape[0]-max_y-offs_top
     #     assert offs_top+offs_bot+max_y == crop_mask.shape[0]
@@ -65,11 +63,32 @@ dataset = get_all_load_dataset(
         image_height=512,
         # image_width=None,
         # image_height=None,
-    )
+    ),
+    dataset_kwargs=dict(
+        subset_lists_file=os.path.join(
+            get_dataset_root(assert_exists=True),
+            "set_lists",
+            "set_lists_static-categories-accurate-reconstruction.sqlite",
+        ),
+        subsets=["val"],
+    )  # this will load the whole dataset without any setlists
 )
 
-# TODO: pick those
-seq_names = dataset.sequence_names()
+
+seq_annots = dataset.sequence_annotations()
+sequence_name_to_score = {
+    sa.sequence_name: sa.reconstruction_quality.gaussian_splats
+    for sa in seq_annots
+}
+sequence_name_to_score = dict(
+    sorted(
+        sequence_name_to_score.items(),
+        key=lambda item: item[1],
+        reverse=True,
+    )
+)
+seq_names = list(sequence_name_to_score.keys())[:20]
+
 
 for seq_name in tqdm(seq_names[1:]):
     i = next(dataset.sequence_indices_in_order(seq_name))
@@ -109,8 +128,6 @@ for seq_name in tqdm(seq_names[1:]):
     )
     with open(outfile_caption, "w") as f:
         f.write(entry.sequence_short_caption)
-
-    continue
 
     outfile = os.path.join(
         outdir,

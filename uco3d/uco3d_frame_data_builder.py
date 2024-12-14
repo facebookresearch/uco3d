@@ -409,10 +409,13 @@ class UCO3DFrameDataBuilder:
             # print((points_after - points_before).abs().max())
             # assert torch.allclose(points_after, points_before, atol=1e-2)
 
-        if frame_data.sequence_gaussian_splats is not None:
-            frame_data.sequence_gaussian_splats = transform_gaussian_splats(
-                frame_data.sequence_gaussian_splats, R, T, s
-            )
+        if (
+            frame_data.sequence_gaussian_splats is not None
+            and len(frame_data.sequence_gaussian_splats) > 0
+        ):
+                frame_data.sequence_gaussian_splats = transform_gaussian_splats(
+                    frame_data.sequence_gaussian_splats, R, T, s
+                )
 
         if frame_data.depth_map is not None:
             # dont forget to rescale the depth map as well
