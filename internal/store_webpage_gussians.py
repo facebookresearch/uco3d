@@ -50,7 +50,7 @@ def _crop_mask_to_center_offsets(crop_mask):
     return offs_top, height, offs_left, width
 
 
-outdir = "./webpage_gaussians/"
+outdir = "/fsx-repligen/dnovotny/datasets/uCO3D/webpage_gaussians/"
 os.makedirs(outdir, exist_ok=True)
 dataset = get_all_load_dataset(
     frame_data_builder_kwargs=dict(
@@ -87,10 +87,10 @@ sequence_name_to_score = dict(
         reverse=True,
     )
 )
-seq_names = list(sequence_name_to_score.keys())[:20]
+seq_names = list(sequence_name_to_score.keys())[:50]
 
 
-for seq_name in tqdm(seq_names[1:]):
+for seq_name in tqdm(seq_names):
     i = next(dataset.sequence_indices_in_order(seq_name))
     entry = dataset[i]
 
@@ -133,17 +133,25 @@ for seq_name in tqdm(seq_names[1:]):
         outdir,
         f"{entry.sequence_name}.ply",
     )
+    
+    
+    if entry.sequence_gaussian_splats.means.shape[0] <= 0:
+        continue
+    
     # truncate points outside a given spherical boundary:
     if entry.sequence_gaussian_splats.fg_mask is None:
         fg_mask = torch.ones(entry.sequence_gaussian_splats.means.shape[0], dtype=bool)
     else:
         fg_mask = entry.sequence_gaussian_splats.fg_mask
     centroid = entry.sequence_gaussian_splats.means[fg_mask].mean(dim=0, keepdim=True)
-    ok = (entry.sequence_gaussian_splats.means - centroid).norm(dim=1) < 3.5
+    ok = (entry.sequence_gaussian_splats.means - centroid).norm(dim=1) < 4.5
     dct = dataclasses.asdict(entry.sequence_gaussian_splats)
     splats_truncated = type(entry.sequence_gaussian_splats)(
         **{k: v[ok] for k, v in dct.items() if v is not None}
     )
+
+    if splats_truncated.means.shape[0] <= 0:
+        continue
 
     # flip upside down
     splats_truncated = transform_gaussian_splats(
