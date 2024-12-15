@@ -71,8 +71,10 @@ class UCO3DFrameDataBuilder:
             depth values used for evaluation (the points consistent across views).
         load_masks: Enable loading frame foreground masks.
         load_point_clouds: Enable loading sequence-level point clouds.
-        max_points: Cap on the number of loaded points in the point cloud;
-            if reached, they are randomly sampled without replacement.
+        load_segmented_point_clouds: Enable loading sequence-level segmented point clouds.
+        load_sparse_point_clouds: Enable loading sequence-level sparse point clouds.
+        load_empty_point_cloud_if_missing: Enable loading an empty point cloud if the
+            requested point cloud is missing.
         load_gaussian_splats: Enable loading sequence-level 3D gaussian splats.
         gaussian_splats_truncate_background: Whether to truncate the background
             means of the gaussian splats.
@@ -105,17 +107,21 @@ class UCO3DFrameDataBuilder:
     """
 
     dataset_root: Optional[str] = None
+    # frame-level modality load switches
     load_images: bool = True
     load_depths: bool = True
     load_depth_masks: bool = True
     load_masks: bool = True
+    # point cloud load switches
     load_point_clouds: bool = False
     load_segmented_point_clouds: bool = False
     load_sparse_point_clouds: bool = False
-    max_points: int = 0
+    load_empty_point_cloud_if_missing: bool = False
     load_gaussian_splats: bool = False
+    # gaussian splat options
     gaussian_splats_truncate_background: bool = False
     gaussian_splats_load_higher_order_harms: bool = True
+    # additional opts
     undistort_loaded_blobs: bool = True
     load_frames_from_videos: bool = True
     image_height: Optional[int] = 800
@@ -424,6 +430,15 @@ class UCO3DFrameDataBuilder:
     def _load_point_cloud(self, path: str) -> PointCloud:
         path_local = self._local_path(path)
         if not os.path.exists(path_local):
+            if self.load_empty_point_cloud_if_missing:
+                warnings.warn(
+                    f"PointCloud file {path} at {path_local} does not exist."
+                    + " Returning an empty PointCloud object."
+                )
+                return PointCloud(
+                    xyz=torch.empty((0, 3), dtype=torch.float32),
+                    rgb=torch.empty((0, 3), dtype=torch.float32),
+                )
             raise FileNotFoundError(
                 f"PointCloud file {path} at {path_local} does not exist."
             )
