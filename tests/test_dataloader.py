@@ -76,7 +76,7 @@ class TestDataloader(unittest.TestCase):
                 load_depths=True,
                 load_masks=False,
                 load_depth_masks=False,
-                load_gaussian_splats=False,
+                load_gaussian_splats=True,
                 gaussian_splats_truncate_background=False,
                 load_point_clouds=False,
                 load_segmented_point_clouds=False,

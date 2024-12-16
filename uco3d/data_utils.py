@@ -55,7 +55,6 @@ def get_all_load_dataset(
     Returns:
         A UCO3DDataset object.
     """
-    print("SET load_gaussian_splats TO TRUE!")
     frame_data_builder_kwargs = {
         **dict(
             apply_alignment=True,
@@ -63,7 +62,7 @@ def get_all_load_dataset(
             load_depths=True,
             load_masks=True,
             load_depth_masks=True,
-            load_gaussian_splats=False,
+            load_gaussian_splats=True,
             gaussian_splats_truncate_background=True,
             load_point_clouds=True,
             load_segmented_point_clouds=True,
