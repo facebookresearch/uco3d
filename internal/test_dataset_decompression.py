@@ -217,7 +217,6 @@ def _run_one_download(
         download_modalities = download_modalities,
     )
     
-    
     if download_modalities is None:
         # run the testing suite
         with temporary_working_directory(TEST_DIR):
@@ -254,13 +253,13 @@ def _run_one_download(
 # )
 
 # download some modalities and categories
-_run_one_download(
-    zipfiles_folder = "/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/compressed/",
-    download_folder = "/fsx-repligen/dnovotny/datasets/uCO3D/extract_test/v0_modalities_categories/",
-    link_list_file = "/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/file_mapping.json",
-    sha256_file = "/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/sha256_hashes.json",
-    download_categories = None,
-    download_super_categories = ["safety_and_security_items"],
-    download_modalities = ["rgb_videos", "sparse_point_clouds", "point_clouds"],
-    big_metadata_file="/fsx-repligen/shared/datasets/uCO3D/dataset_export/metadata.sqlite",
-)
+# _run_one_download(
+#     zipfiles_folder = "/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/compressed/",
+#     download_folder = "/fsx-repligen/dnovotny/datasets/uCO3D/extract_test/v0_modalities_categories/",
+#     link_list_file = "/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/file_mapping.json",
+#     sha256_file = "/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/sha256_hashes.json",
+#     download_categories = None,
+#     download_super_categories = ["safety_and_security_items"],
+#     download_modalities = ["rgb_videos", "sparse_point_clouds", "point_clouds"],
+#     big_metadata_file="/fsx-repligen/shared/datasets/uCO3D/dataset_export/metadata.sqlite",
+# )

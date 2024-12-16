@@ -302,6 +302,7 @@ if __name__ == "__main__":
 # python ./test_iterate_whole_dataset.py --world_size 32 --log_dir="/fsx-repligen/dnovotny/datasets/uCO3D/uco3d_iterate_log_241213_2/" --dataset_root="/fsx-repligen/shared/datasets/uCO3D/dataset_export/" --num_workers 16
 # python ./test_iterate_whole_dataset.py --world_size 32 --log_dir="/fsx-repligen/dnovotny/datasets/uCO3D/uco3d_iterate_log_241215/" --dataset_root="/fsx-repligen/shared/datasets/uCO3D/dataset_export/" --num_workers 16
 # python ./test_iterate_whole_dataset.py --world_size 0 --log_dir="/fsx-repligen/dnovotny/datasets/uCO3D/uco3d_iterate_log_241215_debug/" --dataset_root="/fsx-repligen/shared/datasets/uCO3D/dataset_export/" --num_workers 16 --run_locally
+# python ./test_iterate_whole_dataset.py --world_size 0 --log_dir="/fsx-repligen/dnovotny/datasets/uCO3D/uco3d_iterate_log_241216_debug/" --dataset_root="/fsx-repligen/shared/datasets/uCO3D/dataset_export/" --num_workers 0 --run_locally
 
 
 
