@@ -122,7 +122,7 @@ if __name__ == "__main__":
         n_download_workers=int(args.n_download_workers),
         n_extract_workers=int(args.n_extract_workers),
         download_categories=args.download_categories,
-        download_sub_categories=args.download_sub_categories,
+        download_super_categories=args.download_super_categories,
         download_modalities=args.download_modalities,
         checksum_check=bool(args.checksum_check),
         clear_archives_after_unpacking=bool(args.clear_archives_after_unpacking),

@@ -256,7 +256,7 @@ if __name__ == "__main__":
 
     else:
         from griddle.submitit_jobs import submitit_jobs
-
+        
         username = getpass.getuser()
         user_slurm_log_dir = f"/fsx-repligen/{username}/slurm_jobs_uco3d/"
         os.makedirs(user_slurm_log_dir, exist_ok=True)

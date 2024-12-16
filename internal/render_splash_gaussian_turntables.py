@@ -8,10 +8,15 @@
 import argparse
 import dataclasses
 import os
+import math
+import random
 
 import numpy as np
 import torch
 import torchvision
+
+from collections import defaultdict
+from tqdm import tqdm
 
 from uco3d import (
     GaussianSplats,
@@ -21,31 +26,11 @@ from uco3d import (
 
 
 def main():
-    argparser = argparse.ArgumentParser(
-        description=(
-            "Render turn-table videos of Gaussian Splat"
-            + "reconstructions from the uCO3D dataset."
-        )
-    )
-    argparser.add_argument(
-        "--output_root",
-        type=str,
-        help="Folder for outputting turn-table videos.",
-        default=os.path.join(
-            os.path.dirname(__file__),
-            "rendered_gaussian_turntables",
-        ),
-    )
-    argparser.add_argument(
-        "--num_scenes",
-        type=int,
-        help="The number of visualised scenes.",
-        default=10,
-    )
-    args = argparser.parse_args()
+    output_root = "/fsx-repligen/dnovotny/visuals/uco3d_gauss_turntables/"
+    num_scenes = 1000
 
     # create output root folder
-    outroot = str(args.output_root)
+    outroot = output_root
     os.makedirs(outroot, exist_ok=True)
 
     # obtain the dataset
@@ -64,7 +49,9 @@ def main():
             load_sparse_point_clouds=False,
             # -----------------------------------------------
         ),
+        set_lists_file_name="set_lists_static-categories-accurate-reconstruction.sqlite",
     )
+    
     # sort the sequences based on the reconstruction quality score
     seq_annots = dataset.sequence_annotations()
     sequence_name_to_score = {
@@ -77,13 +64,39 @@ def main():
             reverse=True,
         )
     )
-
+    
+    supercat_to_sequence = defaultdict(list)
+    for sa in seq_annots:
+        supercat_to_sequence[sa.super_category].append(sa.sequence_name)
+    
+    sequences_show = []
+    n_per_supercat = int(math.ceil(num_scenes / len(supercat_to_sequence)))
+    for super_category, super_category_seqs in supercat_to_sequence.items():
+        sc_sequence_name_to_score = {
+            seq_name: sequence_name_to_score[seq_name]
+            for seq_name in super_category_seqs
+        }
+        sc_sequence_name_to_score = dict(
+            sorted(
+                sc_sequence_name_to_score.items(),
+                key=lambda item: item[1],
+                reverse=True,
+            )
+        )
+        sequences_show.extend(list(sc_sequence_name_to_score.keys())[:n_per_supercat])
+        
+    print(len(sequences_show))
+    random.shuffle(sequences_show)
+        
     # iterate over sequences and render a 360 video of each
-    for seqi, seq_name in enumerate(sequence_name_to_score):
-        if seqi >= int(args.num_scenes):
+    for seqi, seq_name in enumerate(tqdm(sequences_show)):
+        if seqi >= int(num_scenes):
             break
         print(f"Rendering {seq_name}: {sequence_name_to_score[seq_name]}")
         outfile = os.path.join(outroot, seq_name + ".mp4")
+        if os.path.exists(outfile):
+            print(f"Skipping {outfile}, already exists.")
+            continue
         dataset_idx = next(dataset.sequence_indices_in_order(seq_name))
         frame_data = dataset[dataset_idx]
         assert seq_name == frame_data.sequence_name
@@ -110,14 +123,18 @@ def _render_gaussians(
     camera_matrices = camera_matrix[None].repeat(n_frames, 1, 1)
 
     # render the splats
-    renders, _, _ = render_splats_opencv(
-        viewmats,
-        camera_matrices,
-        splats_truncated,
-        [512, 512],
-        near_plane=1.0,
-        camera_matrix_in_ndc=True,
-    )
+    try:
+        renders, _, _ = render_splats_opencv(
+            viewmats,
+            camera_matrices,
+            splats_truncated,
+            [512, 512],
+            near_plane=1.0,
+            camera_matrix_in_ndc=True,
+        )
+    except torch.cuda.OutOfMemoryError:
+        print("Out of memory error, skipping this scene.")
+        return
 
     # finally write the visualisation
     torchvision.io.write_video(

@@ -4,16 +4,19 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-import boto3
+
 import os
 import shutil
 import requests
 import functools
 import json
 import warnings
+import time
+import random
 
 from typing import List, Optional
 from multiprocessing import Pool
+from multiprocessing.dummy import Pool as SerialPool
 from tqdm import tqdm
 
 from check_checksum import check_uco3d_sha256
@@ -80,9 +83,9 @@ def download_dataset(
 
     # read the links file
     with open(link_list_file, "r") as f:
-        links = json.load(f)
+        links: dict = json.load(f)
 
-    # extract plausible modalities, categories, super categories
+    # extract possible modalities, categories, super categories
     uco3d_modalities = set()
     uco3d_categories = set()
     uco3d_super_categories = set()
@@ -125,7 +128,8 @@ def download_dataset(
     data_links = []
 
     def _add_to_data_links(link: str):
-        data_links.append((f"part_{len(data_links):06d}.zip", link))
+        data_links.append((os.path.basename(link), link))
+        # data_links.append((f"part_{len(data_links):06d}.zip", link))
 
     for modality, modality_links in links.items():
         if modality == "metadata":
@@ -139,7 +143,7 @@ def download_dataset(
                         _add_to_data_links(l)
 
     # multiprocessing pool
-    with Pool(processes=n_download_workers) as download_pool:
+    with _get_pool_fn(n_download_workers)(processes=n_download_workers) as download_pool:
         print(f"Downloading {len(data_links)} dataset files ...")
         download_ok = {}
         for link_name, ok in tqdm(
@@ -169,7 +173,7 @@ def download_dataset(
             )
 
     print(f"Extracting {len(data_links)} dataset files ...")
-    with Pool(processes=n_extract_workers) as extract_pool:
+    with _get_pool_fn(n_extract_workers)(processes=n_extract_workers) as extract_pool:
         for _ in tqdm(
             extract_pool.imap(
                 functools.partial(
@@ -183,7 +187,23 @@ def download_dataset(
         ):
             pass
 
+    # clean up the in-progress folder if empty
+    in_progress_folder = _get_in_progress_folder(download_folder)
+    if os.path.isdir(in_progress_folder) and len(os.listdir(in_progress_folder))==0:
+        print(f"Removing in-progress downloads folder {in_progress_folder}")
+        shutil.rmtree(in_progress_folder)
+    
     print("Done")
+
+
+def _get_in_progress_folder(download_folder: str):
+    return os.path.join(download_folder, "_in_progress")
+
+
+def _get_pool_fn(n_workers: int):
+    if n_workers <= 1:
+        return SerialPool
+    return Pool
 
 
 def _unpack_file(
@@ -194,6 +214,8 @@ def _unpack_file(
     link_name, _ = link
     local_fl = os.path.join(download_folder, link_name)
     print(f"Unpacking dataset file {local_fl} ({link_name}) to {download_folder}.")
+    # important, shutil.unpack_archive is not thread-safe:
+    time.sleep(random.random() * 0.3)
     shutil.unpack_archive(local_fl, download_folder)
     if clear_archive:
         os.remove(local_fl)
@@ -213,7 +235,7 @@ def _download_file(
         print(f"Skipping {local_fl_final}, already downloaded!")
         return link_name, True
 
-    in_progress_folder = os.path.join(download_folder, "_in_progress")
+    in_progress_folder = _get_in_progress_folder(download_folder)
     os.makedirs(in_progress_folder, exist_ok=True)
     local_fl = os.path.join(in_progress_folder, link_name)
 
@@ -240,6 +262,11 @@ def _download_file(
 
 def _download_with_progress_bar(url: str, fname: str, filename: str):
     # taken from https://stackoverflow.com/a/62113293/986477
+    if not url.startswith("http"):
+        # url is in fact a local path, so we copy to the download folder
+        print(f"Local copy {url} -> {fname}")
+        shutil.copy(url, fname)
+        return
     resp = requests.get(url, stream=True)
     print(url)
     total = int(resp.headers.get("content-length", 0))

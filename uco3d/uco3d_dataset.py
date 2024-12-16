@@ -310,7 +310,8 @@ class UCO3DDataset:  # pyre-ignore
             entry = session.scalars(stmt).one()
             seq_metadata = session.scalars(seq_stmt).one()
         logger.debug(f"Time for db select operations is {time.time()-start_time}")
-        assert entry.image.path == self._index.loc[(seq, frame), "_image_path"]
+        if (entry.image.path is not None) and ("_image_path" in self._index):
+            assert entry.image.path == self._index.loc[(seq, frame), "_image_path"]
 
         frame_data = self.frame_data_builder.build(
             entry, seq_metadata, load_blobs=load_blobs
