@@ -59,7 +59,23 @@ Execute `python dataset_download/download_dataset.py -h` for the list of all dow
 
 #### Dataset size per modality
 
-TODO
+TODO: refine this
+
+```
+Results:
+--------------------------------------------------
+Category                            Size (GB)       File Count
+--------------------------------------------------
+part_depth_maps_                    9,685.37 GB        1380
+part_gaussian_splats_               1,176.10 GB        1379
+part_mask_videos_                   160.43 GB        1388
+part_point_clouds_                  571.09 GB        1378
+part_rgb_videos_                    7,582.21 GB        1388
+part_segmented_point_clouds_        43.92 GB        1377
+part_sparse_point_clouds_           41.07 GB        1388
+--------------------------------------------------
+Total                               19,260.20 GB        9678
+```
 
 ### Downloading specific categories or super-categories
 
