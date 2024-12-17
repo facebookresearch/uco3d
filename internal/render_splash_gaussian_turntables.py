@@ -26,7 +26,7 @@ from uco3d import (
 
 
 def main():
-    output_root = "/fsx-repligen/dnovotny/visuals/uco3d_gauss_turntables/"
+    output_root = "/fsx-repligen/dnovotny/visuals/uco3d_gauss_turntables_thr3p5/"
     num_scenes = 1000
 
     # create output root folder
@@ -110,7 +110,7 @@ def _render_gaussians(
     outfile: str,
     n_frames: int = 23*4,
     fps: int = 23,
-    truncate_gaussians_outside_sphere_thr: float = 4.5,
+    truncate_gaussians_outside_sphere_thr: float = 3.5,
 ):
     # truncate gaussians outside a spherical boundary
     splats_truncated = _truncate_gaussians_outside_sphere(

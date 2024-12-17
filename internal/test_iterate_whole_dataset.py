@@ -15,6 +15,7 @@ import torch
 from typing import List
 from tqdm import tqdm
 from uco3d.data_utils import get_all_load_dataset
+from collections import defaultdict
 
 
 # To resolve memory leaks giving received 0 items from anecdata
@@ -148,38 +149,85 @@ def _analyze_logs(log_dir):
     bad_gauss_splats = []
     missing_segmented_pcls = []
     
+    seq_to_exc = {}
+    
     for exc_file in tqdm(exc_files):
         with open(exc_file, "r") as f:
             exc_string = f.read()
         batch_file = exc_file.replace("_exc.txt", "_batch.json")
         with open(batch_file, "r") as f:
-            batch_indices = json.load(f)
+            batch_info = json.load(f)
         
-        exc_lines = exc_string.split()
+        seq_name = tuple(batch_info["batch_sequence_names"][0])
+        seq_to_exc[seq_name] = exc_string
         
-        if exc_lines[-1].endswith("/gaussian_splats/meta.json'"):
-            start = exc_lines[-1].rfind("/fsx-repligen/shared/")
-            splats_folder = exc_lines[-1][start:-1]
-            bad_gauss_splats.append(splats_folder)
-            continue
+        # exc_lines = exc_string.split()
+        
+        # if exc_lines[-1].endswith("/gaussian_splats/meta.json'"):
+        #     start = exc_lines[-1].rfind("/fsx-repligen/shared/")
+        #     splats_folder = exc_lines[-1][start:-1]
+        #     bad_gauss_splats.append(splats_folder)
+        #     continue
           
-        if exc_lines[-4].endswith("segmented_point_cloud.ply"):
-            missing_segmented_pcls.append(exc_lines[-4])
-            continue
+        # if exc_lines[-4].endswith("segmented_point_cloud.ply"):
+        #     missing_segmented_pcls.append(exc_lines[-4])
+        #     continue
           
-        # print("\n\n\n\n----------\n\n\n\n")
+        # # print("\n\n\n\n----------\n\n\n\n")
         # print(exc_string)
         # print(batch_indices)
         # import pdb; pdb.set_trace()
         # pass
 
-    for missing_segmented_pcl in missing_segmented_pcls:
-        print(missing_segmented_pcl)
+    import re
+    
+    err_description_to_seqs = defaultdict(list)
+    for seq, exc in seq_to_exc.items():
+        print("\n\n\n\n----------\n\n\n\n")
+        any_match = False
+        for err_description, pat in (
+            ("dataloader fail", r"RuntimeError: DataLoader worker (.*) exited unexpectedly"),
+            ("bad depth_maps file", r"self\.depth_map = crop_around_box(.*)squashed image"),
+            ("bad depth_maps file (KeyError)", r"h5py\.h5o\.open(.*)KeyError: \"Unable to open object"),
+            ("missing segmented_point_cloud.py", r"FileNotFoundError: PointCloud file /fsx-repligen/shared/datasets/uCO3D/dataset_export/(.*)/segmented_point_cloud.ply (.*) does not exist."),
+            ("missing gaussian splats meta.json", r"FileNotFoundError: \[Errno 2\] No such file or directory: \'/fsx-repligen/shared/datasets/uCO3D/dataset_export/(.*)/gaussian_splats/meta.json\'"),
+            ("bad CRC-32 for centroids.npy", r"zipfile.BadZipFile: Bad CRC-32 for file \'centroids.npy\'"),
+            ("cannot load RGB image from video", r"assert image_np is not None"),
+            ("missing depth_mps.h5", r"FileNotFoundError: Depth video /fsx-repligen/shared/datasets/uCO3D/dataset_export/(.*)/depth_maps.h5 does not exist."),
+            ("bad shape in gaussian splats meta.json", r"load_compressed_gaussians(.*)RuntimeError: shape(.*)is invalid for input of size(.*)"),
+            ("missing mask_video.mkv", r"FileNotFoundError: Video /fsx-repligen/shared/datasets/uCO3D/dataset_export/(.*)/mask_video.mkv does not exist."),
+        ):
+            match = re.compile(pat).search(exc.replace("\n", ""))
+            if match is not None:
+                print(match.groups())
+                any_match = True
+                err_description_to_seqs[err_description].append(seq)
+                
+        if not any_match:
+            print(exc)
+            print(seq)
+            import pdb; pdb.set_trace()
+            pass
+    
+    print("\n\n\n\n----------\n\n\n\n")
+    for err_description, seqs in err_description_to_seqs.items():
+        print(err_description)
+        for seq in seqs:
+            print("   " + "/".join(seq))
+    
+    
+    
+    # for missing_segmented_pcl in missing_segmented_pcls:
+    #     print(missing_segmented_pcl)
 
     # bad_gauss_splats = sorted(list(set(bad_gauss_splats)))
     # for splats_folder in bad_gauss_splats:
     #     print(splats_folder)
     # import pdb; pdb.set_trace()
+
+
+# FileNotFoundError: Video /fsx-repligen/shared/datasets/uCO3D/dataset_export/computers_and_peripherals/mouse_computer_equipment/1-94393-93211/mask_video.mkv does not exist.
+# FileNotFoundError: PointCloud file /fsx-repligen/shared/datasets/uCO3D/dataset_export/office_and_school_supplies/puncher/13-44571-5351/segmented_point_cloud.ply at /fsx-repligen/shared/datasets/uCO3D/dataset_export/office_and_school_supplies/puncher/13-44571-5351/segmented_point_cloud.ply does not exist.
 
 
 def _get_worker_checkpoint_file(log_dir, rank):
@@ -206,7 +254,7 @@ def _load_worker_checkpoint(log_dir, rank):
 
 if __name__ == "__main__":
     argparse = argparse.ArgumentParser()
-    argparse.add_argument("--dataset_root", type=str, required=True)
+    argparse.add_argument("--dataset_root", type=str, default=None)
     argparse.add_argument("--log_dir", type=str, required=True)
     argparse.add_argument("--world_size", type=int, default=4)
     argparse.add_argument("--num_workers", type=int, default=4)

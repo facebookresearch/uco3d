@@ -8,6 +8,7 @@ import copy
 import tempfile
 import pandas as pd
 import random
+import shutil
 from uco3d import get_all_load_dataset
 from pathlib import Path
 
@@ -86,17 +87,19 @@ def _restrict_metadata_to_downloaded_files(big_metadata_file, download_folder):
             raise ValueError(f"unknown table name {tab_name}")
     
     # Connect to the SQLite database (it will be created if it doesn't exist)
-    target_db_file = os.path.join(download_folder, "metadata.sqlite")
-    print(f"writing {target_db_file}")
-    # assert not os.path.isfile(target_db_file)
-    con = sqlite3.connect(target_db_file)
-    # Write the dataframes to the database
-    sequence_annots.to_sql('sequence_annots', con, if_exists='replace', index=False)
-    frame_annots.to_sql('frame_annots', con, if_exists='replace', index=False)
-    # Close the connection
-    con.close()
-    
-
+    with tempfile.TemporaryDirectory() as temp_dir:    
+        target_db_file = os.path.join(temp_dir, "temp_metadata.sqlite")
+        print(f"writing {target_db_file}")
+        # assert not os.path.isfile(target_db_file)
+        con = sqlite3.connect(target_db_file)
+        # Write the dataframes to the database
+        sequence_annots.to_sql('sequence_annots', con, if_exists='replace', index=False)
+        frame_annots.to_sql('frame_annots', con, if_exists='replace', index=False)
+        # Close the connection
+        con.close()
+        target_db_file_final = os.path.join(download_folder, "metadata.sqlite")    
+        shutil.move(target_db_file, target_db_file_final)
+        
 def _test_iterate_dataset(
     download_folder,
     download_modalities = None,
@@ -147,6 +150,10 @@ def _run_one_download(
         links = json.load(f)
     links_full_path = copy.deepcopy(links)
     for mod, mod_links in links.items():
+        if mod=="metadata":
+            assert isinstance(mod_links, str)
+            links_full_path[mod] = os.path.join(zipfiles_folder, mod_links)
+            continue
         for sc, sc_links in mod_links.items():
             for cat, cat_links in sc_links.items():
                 links_full_path[mod][sc][cat] = [
@@ -231,26 +238,28 @@ def _run_one_download(
  # download everything
 # _run_one_download(
 #     zipfiles_folder = "/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/compressed/",
-#     download_folder = "/fsx-repligen/dnovotny/datasets/uCO3D/extract_test/v0/",
+#     download_folder = "/fsx-repligen/dnovotny/datasets/uCO3D/extract_test/v1/",
 #     link_list_file = "/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/file_mapping.json",
 #     sha256_file = "/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/sha256_hashes.json",
 #     download_categories = None,
 #     download_super_categories = None,
 #     download_modalities = None,
-#     big_metadata_file="/fsx-repligen/shared/datasets/uCO3D/dataset_export/metadata.sqlite",
+#     # big_metadata_file="/fsx-repligen/shared/datasets/uCO3D/dataset_export/metadata.sqlite",
+#     big_metadata_file="/fsx-repligen/dnovotny/datasets/uCO3D/extract_test/v1/metadata.sqlite",
 # )
 
 # download some modalities
-# _run_one_download(
-#     zipfiles_folder = "/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/compressed/",
-#     download_folder = "/fsx-repligen/dnovotny/datasets/uCO3D/extract_test/v0_modalities/",
-#     link_list_file = "/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/file_mapping.json",
-#     sha256_file = "/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/sha256_hashes.json",
-#     download_categories = None,
-#     download_super_categories = None,
-#     download_modalities = ["rgb_videos", "sparse_point_clouds", "point_clouds"],
-#     big_metadata_file="/fsx-repligen/shared/datasets/uCO3D/dataset_export/metadata.sqlite",
-# )
+_run_one_download(
+    zipfiles_folder = "/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/compressed/",
+    download_folder = "/fsx-repligen/dnovotny/datasets/uCO3D/extract_test/v1_modalities/",
+    link_list_file = "/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/file_mapping.json",
+    sha256_file = "/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/sha256_hashes.json",
+    download_categories = None,
+    download_super_categories = None,
+    download_modalities = ["rgb_videos", "sparse_point_clouds", "point_clouds"],
+    # big_metadata_file="/fsx-repligen/shared/datasets/uCO3D/dataset_export/metadata.sqlite",
+    big_metadata_file="/fsx-repligen/dnovotny/datasets/uCO3D/extract_test/v1_modalities/metadata.sqlite",
+)
 
 # download some modalities and categories
 # _run_one_download(
