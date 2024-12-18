@@ -3,8 +3,10 @@ import pandas as pd
 import sqlalchemy as sa
 import sqlite3
 
-metadata = "/fsx-repligen/shared/datasets/uCO3D/dataset_export/metadata_vgg_1212_166k.sqlite"
-setlists = "/fsx-repligen/shared/datasets/uCO3D/dataset_export/set_lists_allcat_val1100_dec12.sqlite"
+# metadata = "/fsx-repligen/shared/datasets/uCO3D/dataset_export/metadata_vgg_1212_166k.sqlite"
+metadata = "/fsx-repligen/shared/datasets/uCO3D/dataset_export/metadata.sqlite"
+# setlists = "/fsx-repligen/shared/datasets/uCO3D/dataset_export/set_lists_allcat_val1100_dec12.sqlite"
+setlists = "/fsx-repligen/shared/datasets/uCO3D/dataset_export/set_lists/set_lists_all-categories.sqlite"
 
 def dump_df_to_sqlite(df, output_path, table_name: str = "set_lists", table_name_length="sequence_lengths"):
     engine = sa.create_engine(f"sqlite:///{output_path}")
@@ -28,7 +30,10 @@ def dump_df_to_sqlite(df, output_path, table_name: str = "set_lists", table_name
         cursor.execute("PRAGMA journal_mode=WAL")
         print(cursor.fetchone())
 
-def get_subsets(df, threshold=0.3, test_categories=["fireplug", "doughnut", "apple"]):
+def get_subsets(
+    df, threshold=0.3, accurate_threshold=0.2, test_categories=["fireplug", "doughnut", "apple"]
+):
+    assert threshold >= accurate_threshold
     is_dynamic = df['super_category'].isin(["animals_not_close_to_humans", "pets_most_friendly_to_humans", "general_animals"])
     df_static = df[~is_dynamic]
     dynamic = df[is_dynamic]
@@ -40,15 +45,17 @@ def get_subsets(df, threshold=0.3, test_categories=["fireplug", "doughnut", "app
     result["dynamic_val"] = dynamic_val["sequence_name"].tolist()
 
     filtered = df_static[df_static["score"] > threshold]
+    filtered_best_subset = df_static[df_static["score"] > accurate_threshold]
     val_random = filtered.sample(n=500, random_state=42)
     val_diverse = filtered.groupby('category').sample(n=1, random_state=42)
 
     result["static_val_random"] = val_random["sequence_name"].tolist()
     result["static_val_diverse"] = val_diverse["sequence_name"].tolist()
-    static_train_best = filtered.drop(val_random.index.union(val_diverse.index))
+    static_train_best = filtered_best_subset.drop(val_random.index.union(val_diverse.index))
     result["static_train_best"] = static_train_best["sequence_name"].tolist()
     result["static_train"] = df_static.drop(val_random.index.union(val_diverse.index))["sequence_name"].tolist()
 
+    # TODO: sample with threshold, not accurate_threshold for this
     result["debug_train"] = static_train_best[
         static_train_best["category"].isin(test_categories)
     ].groupby('category').sample(n=5, random_state=42)["sequence_name"].tolist()
@@ -94,6 +101,8 @@ if __name__ == "__main__":
     sequence_annots["score"] = sequence_annots["sequence_name"].map(scores).fillna(0.0)
 
     result = get_subsets(sequence_annots)
+    print({k: len(v) for k, v in result.items()})
+
     alex_setlists_trainval = alex_setlists[alex_setlists["subset"] != "test"]
 
     print("Subsets done. Dumping")
