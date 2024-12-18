@@ -181,7 +181,7 @@ class UCO3DFrameDataBuilder:
                     load_higher_order_harms=self.gaussian_splats_load_higher_order_harms,
                 ),
                 cleanup_fn=lambda _: None,
-                max_size=self.point_cloud_cache_size,
+                max_size=self.gaussian_splat_cache_size,
             )
 
     def build(
@@ -239,7 +239,7 @@ class UCO3DFrameDataBuilder:
                 frame_data.mask_path = mask_path
 
                 logger.debug(
-                    f"Mask frame load time {time.time()-mask_image_load_start_time}"
+                    f"Mask frame load time {time.time()-mask_image_load_start_time:.5f}"
                 )
                 frame_data.fg_probability = safe_as_tensor(fg_mask_np, torch.float)
 
@@ -275,7 +275,7 @@ class UCO3DFrameDataBuilder:
                     image_np = load_image(self._local_path(frame_data.image_path))
                 assert image_np is not None
                 logger.debug(
-                    f"rgb frame load time {time.time()-rgb_image_load_start_time}"
+                    f"rgb frame load time {time.time()-rgb_image_load_start_time:.5f}"
                 )
                 frame_data.image_rgb = self._postprocess_image(
                     image_np, frame_annotation.image.size, frame_data.fg_probability
@@ -326,6 +326,7 @@ class UCO3DFrameDataBuilder:
         # load all possible types of point clouds
         if load_blobs:
             for pcl_type_str in ["", "sparse_", "segmented_"]:
+                pcl_start = time.time()
                 do_load_pcl = getattr(self, f"load_{pcl_type_str}point_clouds")
                 if not do_load_pcl:
                     continue
@@ -341,9 +342,13 @@ class UCO3DFrameDataBuilder:
                     frame_data, f"sequence_{pcl_type_str}point_cloud_path", pcl_path
                 )
                 setattr(frame_data, f"sequence_{pcl_type_str}point_cloud", point_cloud)
+                logger.debug(
+                    f"{pcl_type_str}point_cloud load time {time.time()-pcl_start:.5f}"
+                )
 
         # warnings.warn("Test gaussian splat loading!")
         if load_blobs and self.load_gaussian_splats:
+            gauss_start = time.time()
             gaussians_dir = os.path.join(
                 self.dataset_root,
                 sequence_annotation.gaussian_splats.dir,
@@ -367,6 +372,9 @@ class UCO3DFrameDataBuilder:
                 else:
                     sequence_gaussians = truncate_bg_gaussians(sequence_gaussians)
             frame_data.sequence_gaussian_splats = sequence_gaussians
+            logger.debug(
+                f"Gauss splats load time {time.time()-gauss_start:.5f}"
+            )
 
         if self.box_crop:
             frame_data.crop_by_metadata_bbox_(self.box_crop_context)
@@ -378,17 +386,15 @@ class UCO3DFrameDataBuilder:
             )
 
         if self.apply_alignment:
+            align_start = time.time()
             self._apply_alignment_transform_(sequence_annotation, frame_data)
+            logger.debug(f"Apply-alignment time {time.time()-align_start:.5f}")
 
         return frame_data
 
     def _apply_alignment_transform_(self, sequence_annotation, frame_data):
-        assert sequence_annotation.alignment is not None
-        assert sequence_annotation.alignment.R
-        assert sequence_annotation.alignment.T
-        R = torch.tensor(sequence_annotation.alignment.R, dtype=torch.float32)
-        T = torch.tensor(sequence_annotation.alignment.T, dtype=torch.float32)
-        s = torch.tensor(sequence_annotation.alignment.scale, dtype=torch.float32)
+        # obtain align transform
+        R, T, s = self._get_alignment_transform(sequence_annotation)
 
         # camera_before = copy.deepcopy(frame_data.camera)
 
@@ -419,13 +425,22 @@ class UCO3DFrameDataBuilder:
             frame_data.sequence_gaussian_splats is not None
             and len(frame_data.sequence_gaussian_splats) > 0
         ):
-                frame_data.sequence_gaussian_splats = transform_gaussian_splats(
-                    frame_data.sequence_gaussian_splats, R, T, s
-                )
+            frame_data.sequence_gaussian_splats = transform_gaussian_splats(
+                frame_data.sequence_gaussian_splats, R, T, s
+            )
 
         if frame_data.depth_map is not None:
             # dont forget to rescale the depth map as well
             frame_data.depth_map = frame_data.depth_map * s
+
+    def _get_alignment_transform(self, sequence_annotation):
+        assert sequence_annotation.alignment is not None
+        assert sequence_annotation.alignment.R
+        assert sequence_annotation.alignment.T
+        R = torch.tensor(sequence_annotation.alignment.R, dtype=torch.float32)
+        T = torch.tensor(sequence_annotation.alignment.T, dtype=torch.float32)
+        s = torch.tensor(sequence_annotation.alignment.scale, dtype=torch.float32)
+        return R, T, s
 
     def _load_point_cloud(self, path: str) -> PointCloud:
         path_local = self._local_path(path)
@@ -502,9 +517,7 @@ class UCO3DFrameDataBuilder:
             assert fg_mask is not None
             depth_map *= fg_mask
         depth_mask = (depth_map > 0.0).float()
-        logger.debug(
-            f"Depth H5 {depth_h5_path} time for reading is {time.time()-time_0}."
-        )
+        logger.debug(f"Depth H5 read time {time.time()-time_0:.5f}.")
         return depth_map, "", depth_mask
 
     def _frame_from_video(
@@ -525,7 +538,7 @@ class UCO3DFrameDataBuilder:
         time_1 = time.time()
         logger.debug(
             f"Video {video_path} time elapsed till before creating capture"
-            f" object is {time_1-start_time}"
+            f" object is {time_1-start_time:.5f}"
         )
         capture = (
             # For cache we need to use the non-local full_video_path
@@ -536,13 +549,13 @@ class UCO3DFrameDataBuilder:
         )
         time_2 = time.time()
         logger.debug(
-            f"Video {video_path} Time for creating capture object is {time_2-time_1}."
+            f"Video {video_path} Time for creating capture object is {time_2-time_1:.5f}."
         )
         capture.set(cv2.CAP_PROP_POS_MSEC, timestamp_sec * 1000)
         time_3 = time.time()
-        logger.debug(f"Video {video_path} Time for capture set is {time_3-time_2}.")
+        logger.debug(f"Video {video_path} Time for capture set is {time_3-time_2:.5f}.")
         ret, image = capture.read()
-        logger.debug(f"Video {video_path} Time for reading is {time.time()-time_3}.")
+        logger.debug(f"Video {video_path} Time for reading is {time.time()-time_3:.5f}.")
         if not ret:
             logger.warning(f"Failed to get frame from {video_path} at {timestamp_sec}.")
             return None

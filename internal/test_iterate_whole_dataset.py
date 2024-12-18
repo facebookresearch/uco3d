@@ -7,8 +7,8 @@ import sys
 import traceback
 import json
 import glob
-import sqlite3
 import os
+import re
 
 
 import torch
@@ -18,9 +18,13 @@ from uco3d.data_utils import get_all_load_dataset
 from collections import defaultdict
 
 
+# import logging
+# logging.basicConfig(level=logging.DEBUG)
+
 # To resolve memory leaks giving received 0 items from anecdata
 # Reference link https://github.com/pytorch/pytorch/issues/973
 torch.multiprocessing.set_sharing_strategy("file_system")
+print(torch.multiprocessing.get_all_sharing_strategies())
 
 
 def iterate_dataset_worker(
@@ -31,7 +35,11 @@ def iterate_dataset_worker(
     num_workers: int,
     num_frames_per_batch: int = 16,
     specific_dataset_idx: List[int] = None,
+    fast_check: bool = False,
 ):
+    
+    if fast_check:
+        print("running fast check")
     
     if specific_dataset_idx is not None:
         assert world_size <= 1
@@ -41,6 +49,9 @@ def iterate_dataset_worker(
     dataset = get_all_load_dataset(
         frame_data_builder_kwargs=dict(
             dataset_root=dataset_root,
+            gaussian_splats_load_higher_order_harms=not fast_check,
+            gaussian_splats_truncate_background=True,
+            apply_alignment=not fast_check,
         ),
         dataset_kwargs=dict(
             # subset_lists_file=None,
@@ -86,6 +97,7 @@ def iterate_dataset_worker(
             collate_fn=lambda x: x,
             shuffle=False,
             batch_sampler=batch_sampler,
+            prefetch_factor=4 if num_workers > 0 else None,
         )
         
         assert len(batch_nums) == len(batch_sampler)
@@ -150,6 +162,7 @@ def _analyze_logs(log_dir):
     missing_segmented_pcls = []
     
     seq_to_exc = {}
+    seq_to_idx = {}
     
     for exc_file in tqdm(exc_files):
         with open(exc_file, "r") as f:
@@ -160,6 +173,7 @@ def _analyze_logs(log_dir):
         
         seq_name = tuple(batch_info["batch_sequence_names"][0])
         seq_to_exc[seq_name] = exc_string
+        seq_to_idx[seq_name] = batch_info["batch_indices"]
         
         # exc_lines = exc_string.split()
         
@@ -179,11 +193,9 @@ def _analyze_logs(log_dir):
         # import pdb; pdb.set_trace()
         # pass
 
-    import re
-    
     err_description_to_seqs = defaultdict(list)
     for seq, exc in seq_to_exc.items():
-        print("\n\n\n\n----------\n\n\n\n")
+        # print("\n\n\n\n----------\n\n\n\n")
         any_match = False
         for err_description, pat in (
             ("dataloader fail", r"RuntimeError: DataLoader worker (.*) exited unexpectedly"),
@@ -196,15 +208,25 @@ def _analyze_logs(log_dir):
             ("missing depth_mps.h5", r"FileNotFoundError: Depth video /fsx-repligen/shared/datasets/uCO3D/dataset_export/(.*)/depth_maps.h5 does not exist."),
             ("bad shape in gaussian splats meta.json", r"load_compressed_gaussians(.*)RuntimeError: shape(.*)is invalid for input of size(.*)"),
             ("missing mask_video.mkv", r"FileNotFoundError: Video /fsx-repligen/shared/datasets/uCO3D/dataset_export/(.*)/mask_video.mkv does not exist."),
+            ("stop iteration", r"raise StopIteration"),
         ):
             match = re.compile(pat).search(exc.replace("\n", ""))
             if match is not None:
                 print(match.groups())
                 any_match = True
                 err_description_to_seqs[err_description].append(seq)
+                if "stop iteration" in err_description:
+                    print(seq_to_idx[seq])
+                    import pdb; pdb.set_trace()
+                    pass
                 
+                if "missing segmented_point_cloud.py" in err_description:
+                    pcl_file = str(match.groups()[1][3:])
+                    assert not os.path.isfile(pcl_file)
+            
         if not any_match:
             print(exc)
+            print(seq_to_idx[seq])
             print(seq)
             import pdb; pdb.set_trace()
             pass
@@ -213,9 +235,7 @@ def _analyze_logs(log_dir):
     for err_description, seqs in err_description_to_seqs.items():
         print(err_description)
         for seq in seqs:
-            print("   " + "/".join(seq))
-    
-    
+            print("     " + "/".join(seq))
     
     # for missing_segmented_pcl in missing_segmented_pcls:
     #     print(missing_segmented_pcl)
@@ -224,10 +244,6 @@ def _analyze_logs(log_dir):
     # for splats_folder in bad_gauss_splats:
     #     print(splats_folder)
     # import pdb; pdb.set_trace()
-
-
-# FileNotFoundError: Video /fsx-repligen/shared/datasets/uCO3D/dataset_export/computers_and_peripherals/mouse_computer_equipment/1-94393-93211/mask_video.mkv does not exist.
-# FileNotFoundError: PointCloud file /fsx-repligen/shared/datasets/uCO3D/dataset_export/office_and_school_supplies/puncher/13-44571-5351/segmented_point_cloud.ply at /fsx-repligen/shared/datasets/uCO3D/dataset_export/office_and_school_supplies/puncher/13-44571-5351/segmented_point_cloud.ply does not exist.
 
 
 def _get_worker_checkpoint_file(log_dir, rank):
@@ -260,6 +276,7 @@ if __name__ == "__main__":
     argparse.add_argument("--num_workers", type=int, default=4)
     argparse.add_argument("--run_locally", action="store_true")
     argparse.add_argument("--analyze_logs", action="store_true")
+    argparse.add_argument("--fast_check", action="store_true")
     args = argparse.parse_args()
 
     if bool(args.analyze_logs):    
@@ -281,6 +298,8 @@ if __name__ == "__main__":
                 log_dir=str(args.log_dir),
                 dataset_root=str(args.dataset_root),
                 num_workers=int(args.num_workers),
+                fast_check=bool(args.fast_check),
+                # specific_dataset_idx=[19679710, 19679711, 19679712, 19679713, 19679714, 19679715, 19679716, 19679717, 19679718, 19679719, 19679720, 19679721, 19679722, 19679723, 19679724],
                 # specific_dataset_idx=[25894583, 25894584, 25894585, 25894586, 25894587, 25894588, 25894589, 25894590, 25894591, 25894592, 25894593, 25894594, 25894595, 25894596, 25894597, 25894598],
                 # specific_dataset_idx=[10576774, 10576775, 10576776, 10576777, 10576778, 10576779, 10576780, 10576781, 10576782, 10576783, 10576784, 10576785, 10576786, 10576787, 10576788, 10576789],
                 # specific_dataset_idx=[10577174, 10577175, 10577176, 10577177, 10577178, 10577179, 10577180, 10577181, 10577182, 10577183, 10577184, 10577185, 10577186, 10577187, 10577188, 10577189],  # weird depth
@@ -299,6 +318,7 @@ if __name__ == "__main__":
                     log_dir=str(args.log_dir),
                     dataset_root=str(args.dataset_root),
                     num_workers=int(args.num_workers),
+                    fast_check=bool(args.fast_check),
                 )
                 pool.map(worker, list(range(world_size)))
 
@@ -318,6 +338,7 @@ if __name__ == "__main__":
                 "log_dir": str(args.log_dir),
                 "dataset_root": str(args.dataset_root),
                 "num_workers": int(args.num_workers),
+                "fast_check": bool(args.fast_check),
             }
             for i in range(int(args.world_size))
         ]
@@ -342,8 +363,6 @@ if __name__ == "__main__":
         )
 
 
-
-
 # RUNS:
 # python ./test_iterate_whole_dataset.py --run_locally --world_size 0 --log_dir="$HOME/data/uco3d_iterate_log_241213/" --dataset_root="$HOME/data//"
 # python ./test_iterate_whole_dataset.py --run_locally --world_size 0 --log_dir="/fsx-repligen/dnovotny/datasets/uCO3D/uco3d_iterate_log_241213_debug/" --dataset_root="/fsx-repligen/shared/datasets/uCO3D/dataset_export/" --num_workers 4
@@ -351,9 +370,5 @@ if __name__ == "__main__":
 # python ./test_iterate_whole_dataset.py --world_size 32 --log_dir="/fsx-repligen/dnovotny/datasets/uCO3D/uco3d_iterate_log_241215/" --dataset_root="/fsx-repligen/shared/datasets/uCO3D/dataset_export/" --num_workers 16
 # python ./test_iterate_whole_dataset.py --world_size 0 --log_dir="/fsx-repligen/dnovotny/datasets/uCO3D/uco3d_iterate_log_241215_debug/" --dataset_root="/fsx-repligen/shared/datasets/uCO3D/dataset_export/" --num_workers 16 --run_locally
 # python ./test_iterate_whole_dataset.py --world_size 0 --log_dir="/fsx-repligen/dnovotny/datasets/uCO3D/uco3d_iterate_log_241216_debug/" --dataset_root="/fsx-repligen/shared/datasets/uCO3D/dataset_export/" --num_workers 0 --run_locally
-
-
-
-# ... 33144799 iterations in total ~ 300 days @ 0.75 sec per iteration
-# ... => submit 500 jobs
-# python ./test_iterate_whole_dataset.py --world_size 500 --log_dir="/fsx-repligen/dnovotny/datasets/uCO3D/uco3d_iterate_log_241213/" --dataset_root="/fsx-repligen/shared/datasets/uCO3D/dataset_export/"
+# python ./test_iterate_whole_dataset.py --world_size 0 --log_dir="/fsx-repligen/dnovotny/datasets/uCO3D/uco3d_iterate_log_241217_debug/" --dataset_root="/fsx-repligen/shared/datasets/uCO3D/dataset_export/" --num_workers 0 --run_locally
+# python ./test_iterate_whole_dataset.py --world_size 32 --log_dir="/fsx-repligen/dnovotny/datasets/uCO3D/uco3d_iterate_log_241218/" --dataset_root="/fsx-repligen/shared/datasets/uCO3D/dataset_export/" --num_workers 16

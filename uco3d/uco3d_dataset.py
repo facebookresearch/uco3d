@@ -309,7 +309,7 @@ class UCO3DDataset:  # pyre-ignore
         with sa.orm.Session(self._sql_engine) as session:
             entry = session.scalars(stmt).one()
             seq_metadata = session.scalars(seq_stmt).one()
-        logger.debug(f"Time for db select operations is {time.time()-start_time}")
+        logger.debug(f"Time for db select operations is {time.time()-start_time:.5f}")
         if (entry.image.path is not None) and ("_image_path" in self._index):
             assert entry.image.path == self._index.loc[(seq, frame), "_image_path"]
 
@@ -320,7 +320,7 @@ class UCO3DDataset:  # pyre-ignore
         # The rest of the fields are optional
         frame_data.frame_type = self._get_frame_type(entry)
         logger.debug(
-            f"Time for building frame data end to end is {time.time()-start_time}"
+            f"Time for building frame data end to end is {time.time()-start_time:.5f}"
         )
         return frame_data
 

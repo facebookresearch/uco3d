@@ -289,7 +289,7 @@ def undistort_frame_data_opencv(frame_data):
         image_size=frame_data.image_size_hw[None],
     )
     time_1 = time.time()
-    logger.debug(f"Time for camera undistortion = {time_1-time_0}")
+    logger.debug(f"Time for camera undistortion = {time_1-time_0:.5f}")
     x, y, w, h = roi
     if (frame_data.image_rgb is None) and (frame_data.fg_probability is None):
         return (
@@ -308,7 +308,7 @@ def undistort_frame_data_opencv(frame_data):
     [undistort_map_x, undistort_map_y] = cv2.initUndistortRectifyMap(
         mtx, distortion, None, new_mtx, size, cv2.CV_16SC2
     )
-    logger.debug(f"Time for getting the undistort map {time_2-time_1}")
+    logger.debug(f"Time for getting the undistort map {time_2-time_1:.5f}")
     undistorted_mask = None
     undistorted_image = None
     if frame_data.fg_probability is not None:
@@ -328,7 +328,7 @@ def undistort_frame_data_opencv(frame_data):
         )
         undistorted_image = torch.from_numpy(undistorted_image.transpose((2, 0, 1)))
     time_3 = time.time()
-    logger.debug(f"Time for actually undistorting is {time_3-time_2}")
+    logger.debug(f"Time for actually undistorting is {time_3-time_2:.5f}")
     return (
         undistorted_image,
         undistorted_mask,
