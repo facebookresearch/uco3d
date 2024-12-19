@@ -13,7 +13,7 @@ This repository contains download scripts and tooling for working with the **UnC
 The dataset is described in our paper ["UnCommon Objects in 3D"](TODO).
 
 <center>
-<img src="./uco3d_grid.gif" width="600" />
+<img src="./uco3d_grid.gif" width="600" alt="grid"/>
 </center>
 
 ## Main features
