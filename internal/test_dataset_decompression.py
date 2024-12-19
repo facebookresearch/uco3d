@@ -99,12 +99,12 @@ def _restrict_metadata_to_downloaded_files(big_metadata_file, download_folder):
         con.close()
         target_db_file_final = os.path.join(download_folder, "metadata.sqlite")    
         shutil.move(target_db_file, target_db_file_final)
-        
+
+
 def _test_iterate_dataset(
     download_folder,
     download_modalities = None,
 ):
-    
     modality_to_load_switch = {
         "rgb_videos": "load_images",
         "depth_maps": "load_depths",
@@ -136,8 +136,7 @@ def _run_one_download(
     zipfiles_folder,
     download_folder,
     link_list_file,
-    sha256_file,
-    download_categories = None,
+    category_to_archives_file,
     download_super_categories = None,
     download_modalities = None,
     n_download_workers: int = 8,
@@ -148,21 +147,17 @@ def _run_one_download(
     # adjust the mapping file so it contains full paths to the archives
     with open(link_list_file, "r") as f:
         links = json.load(f)
+        
     links_full_path = copy.deepcopy(links)
-    for mod, mod_links in links.items():
-        if mod=="metadata":
-            assert isinstance(mod_links, str)
-            links_full_path[mod] = os.path.join(zipfiles_folder, mod_links)
-            continue
-        for sc, sc_links in mod_links.items():
-            for cat, cat_links in sc_links.items():
-                links_full_path[mod][sc][cat] = [
-                    os.path.join(zipfiles_folder, link) for link in cat_links
-                ]
-                assert all(
-                    os.path.isfile(l) for l in links_full_path[mod][sc][cat]
-                )
-                
+    for file_name, link_data in links["main_data"].items():
+        links_full_path["main_data"][file_name]["download_url"] = os.path.join(
+            zipfiles_folder,
+            link_data["filename"],
+        )
+        assert os.path.isfile(
+            links_full_path["main_data"][file_name]["download_url"]
+        )
+    
     if True:
         with tempfile.TemporaryDirectory() as temp_dir:
 
@@ -175,10 +170,10 @@ def _run_one_download(
                 "download_dataset.py",
                 "--download_folder",
                 download_folder,
+                "--category_to_archives_file",
+                category_to_archives_file,
                 "--link_list_file",
                 link_list_file_temp,
-                "--sha256_file",
-                sha256_file,
                 "--checksum_check",
                 "--clear_archives_after_unpacking",
                 "--redownload_existing_archives",
@@ -192,10 +187,6 @@ def _run_one_download(
                 if arg_value is not None:
                     cmd.extend([f"--{arg_name}", ",".join(arg_value)])
             
-            _add_to_cmd_if_not_none(
-                "download_categories",
-                download_categories,
-            )
             _add_to_cmd_if_not_none(
                 "download_super_categories",
                 download_super_categories,
@@ -238,27 +229,25 @@ def _run_one_download(
  # download everything
 # _run_one_download(
 #     zipfiles_folder = "/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/compressed/",
-#     download_folder = "/fsx-repligen/dnovotny/datasets/uCO3D/extract_test/v1/",
-#     link_list_file = "/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/file_mapping.json",
-#     sha256_file = "/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/sha256_hashes.json",
-#     download_categories = None,
+#     download_folder = "/fsx-repligen/dnovotny/datasets/uCO3D/extract_test/v2/",
+#     category_to_archives_file = "/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/file_mapping.json",
+#     link_list_file = "/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/download.json",
 #     download_super_categories = None,
 #     download_modalities = None,
 #     # big_metadata_file="/fsx-repligen/shared/datasets/uCO3D/dataset_export/metadata.sqlite",
-#     big_metadata_file="/fsx-repligen/dnovotny/datasets/uCO3D/extract_test/v1/metadata.sqlite",
+#     big_metadata_file="/fsx-repligen/dnovotny/datasets/uCO3D/extract_test/v2/metadata.sqlite",
 # )
 
 # download some modalities
 _run_one_download(
     zipfiles_folder = "/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/compressed/",
-    download_folder = "/fsx-repligen/dnovotny/datasets/uCO3D/extract_test/v1_modalities/",
-    link_list_file = "/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/file_mapping.json",
-    sha256_file = "/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/sha256_hashes.json",
-    download_categories = None,
+    download_folder = "/fsx-repligen/dnovotny/datasets/uCO3D/extract_test/v2_modalities/",
+    link_list_file = "/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/download.json",
+    category_to_archives_file = "/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/file_mapping.json",
     download_super_categories = None,
     download_modalities = ["rgb_videos", "sparse_point_clouds", "point_clouds"],
     # big_metadata_file="/fsx-repligen/shared/datasets/uCO3D/dataset_export/metadata.sqlite",
-    big_metadata_file="/fsx-repligen/dnovotny/datasets/uCO3D/extract_test/v1_modalities/metadata.sqlite",
+    big_metadata_file="/fsx-repligen/dnovotny/datasets/uCO3D/extract_test/v2_modalities/metadata.sqlite",
 )
 
 # download some modalities and categories
@@ -267,7 +256,6 @@ _run_one_download(
 #     download_folder = "/fsx-repligen/dnovotny/datasets/uCO3D/extract_test/v0_modalities_categories/",
 #     link_list_file = "/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/file_mapping.json",
 #     sha256_file = "/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/sha256_hashes.json",
-#     download_categories = None,
 #     download_super_categories = ["safety_and_security_items"],
 #     download_modalities = ["rgb_videos", "sparse_point_clouds", "point_clouds"],
 #     big_metadata_file="/fsx-repligen/shared/datasets/uCO3D/dataset_export/metadata.sqlite",

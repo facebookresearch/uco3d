@@ -12,7 +12,7 @@ import os
 import time
 import warnings
 from dataclasses import dataclass
-from typing import Any, Literal, Optional, Tuple
+from typing import Any, Literal, Optional, Tuple, Union
 
 import cv2
 import numpy as np
@@ -336,7 +336,11 @@ class UCO3DFrameDataBuilder:
                     None,
                 )
                 assert pcl_annot is not None
-                pcl_path = os.path.join(self.dataset_root, pcl_annot.path)
+                pcl_path = (
+                    os.path.join(self.dataset_root, pcl_annot.path) 
+                    if pcl_annot.path is not None
+                    else None
+                )
                 point_cloud = self._load_point_cloud(pcl_path)
                 setattr(
                     frame_data, f"sequence_{pcl_type_str}point_cloud_path", pcl_path
@@ -349,29 +353,36 @@ class UCO3DFrameDataBuilder:
         # warnings.warn("Test gaussian splat loading!")
         if load_blobs and self.load_gaussian_splats:
             gauss_start = time.time()
-            gaussians_dir = os.path.join(
-                self.dataset_root,
-                sequence_annotation.gaussian_splats.dir,
-            )
-            if self.use_cache:
-                sequence_gaussians = copy.deepcopy(
-                    self._gaussian_splat_cache[gaussians_dir]
-                )  # make sure we do not overwrite the cache
-            else:
-                gaussians_dir_local = self._local_path(gaussians_dir)
-                sequence_gaussians = load_compressed_gaussians(
-                    gaussians_dir_local,
-                    load_higher_order_harms=self.gaussian_splats_load_higher_order_harms,
+            if sequence_annotation.gaussian_splats.dir is None:
+                warnings.warn(
+                    f"No Gaussian splats annotation found for {frame_data.sequence_name}!"
+                    " Returning empty Gaussian splats."
                 )
-            if self.gaussian_splats_truncate_background:
-                if sequence_gaussians.fg_mask is None:
-                    warnings.warn(
-                        f"No Gaussian foreground mask found for truncation"
-                        f" {gaussians_dir}! Skipping background cropping."
-                    )
+                sequence_gaussians = GaussianSplats.empty()
+            else:
+                gaussians_dir = os.path.join(
+                    self.dataset_root,
+                    sequence_annotation.gaussian_splats.dir,
+                )
+                if self.use_cache:
+                    sequence_gaussians = copy.deepcopy(
+                        self._gaussian_splat_cache[gaussians_dir]
+                    )  # make sure we do not overwrite the cache
                 else:
-                    sequence_gaussians = truncate_bg_gaussians(sequence_gaussians)
-            frame_data.sequence_gaussian_splats = sequence_gaussians
+                    gaussians_dir_local = self._local_path(gaussians_dir)
+                    sequence_gaussians = load_compressed_gaussians(
+                        gaussians_dir_local,
+                        load_higher_order_harms=self.gaussian_splats_load_higher_order_harms,
+                    )
+                if self.gaussian_splats_truncate_background:
+                    if sequence_gaussians.fg_mask is None:
+                        warnings.warn(
+                            f"No Gaussian foreground mask found for truncation"
+                            f" {gaussians_dir}! Skipping background cropping."
+                        )
+                    else:
+                        sequence_gaussians = truncate_bg_gaussians(sequence_gaussians)
+                frame_data.sequence_gaussian_splats = sequence_gaussians
             logger.debug(
                 f"Gauss splats load time {time.time()-gauss_start:.5f}"
             )
@@ -442,18 +453,25 @@ class UCO3DFrameDataBuilder:
         s = torch.tensor(sequence_annotation.alignment.scale, dtype=torch.float32)
         return R, T, s
 
-    def _load_point_cloud(self, path: str) -> PointCloud:
-        path_local = self._local_path(path)
-        if not os.path.exists(path_local):
+    def _load_point_cloud(self, path: Union[str, None]) -> PointCloud:
+        path_local = self._local_path(path) if path is not None else None
+        if path is None or not os.path.exists(path_local):
             if self.load_empty_point_cloud_if_missing:
-                warnings.warn(
-                    f"PointCloud file {path} at {path_local} does not exist."
-                    + " Returning an empty PointCloud object."
-                )
+                if path is None:
+                    warnings.warn(
+                        "Point cloud path is None. Returning an empty PointCloud object."
+                    )
+                else:
+                    warnings.warn(
+                        f"PointCloud file {path} at {path_local} does not exist."
+                        + " Returning an empty PointCloud object."
+                    )
                 return PointCloud(
                     xyz=torch.empty((0, 3), dtype=torch.float32),
                     rgb=torch.empty((0, 3), dtype=torch.float32),
                 )
+            if path is None:
+                raise ValueError("Point cloud path is None.")
             raise FileNotFoundError(
                 f"PointCloud file {path} at {path_local} does not exist."
             )

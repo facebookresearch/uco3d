@@ -13,27 +13,29 @@ import json
 import warnings
 import time
 import random
+import hashlib
+import copy
 
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from multiprocessing import Pool
 from multiprocessing.dummy import Pool as SerialPool
 from tqdm import tqdm
 
-from check_checksum import check_uco3d_sha256
+
+BLOCKSIZE = 65536  # for sha256 computation
 
 
 def download_dataset(
+    category_to_archives_file: str,
     link_list_file: str,
     download_folder: str,
     n_download_workers: int = 4,
     n_extract_workers: int = 4,
     download_super_categories: Optional[List[str]] = None,
-    download_categories: Optional[List[str]] = None,
     download_modalities: Optional[List[str]] = None,
     checksum_check: bool = False,
     clear_archives_after_unpacking: bool = False,
     skip_downloaded_archives: bool = True,
-    sha256s_file: Optional[str] = None,
 ):
     """
     Downloads and unpacks the dataset in UCO3D format.
@@ -63,15 +65,16 @@ def download_dataset(
         skip_downloaded_archives: Skip re-downloading already downloaded archives.
     """
 
-    if checksum_check and not sha256s_file:
-        raise ValueError(
-            "checksum_check is requested but ground-truth SHA256 file not provided!"
-        )
-
     if not os.path.isfile(link_list_file):
         raise ValueError(
             "Please specify `link_list_file` with a valid path to a json"
             " with zip file download links."
+        )
+        
+    if not os.path.isfile(category_to_archives_file):
+        raise ValueError(
+            "Please specify `category_to_archives_file` with a valid path to a json"
+            " with mapping between dataset categories and archive filenames."
         )
 
     if not os.path.isdir(download_folder):
@@ -83,26 +86,26 @@ def download_dataset(
 
     # read the links file
     with open(link_list_file, "r") as f:
-        links: dict = json.load(f)
+        links: dict = json.load(f)["main_data"]
 
-    # extract possible modalities, categories, super categories
+    with open(category_to_archives_file, "r") as f:
+        category_to_archives: dict = json.load(f)
+
+    # extract possible modalities, super categories
     uco3d_modalities = set()
-    uco3d_categories = set()
     uco3d_super_categories = set()
-    for modality, modality_links in links.items():
+    for modality, modality_links in category_to_archives.items():
         uco3d_modalities.add(modality)
         if modality == "metadata":
             continue
         for super_category, super_category_links in modality_links.items():
             uco3d_super_categories.add(super_category)
-            for category, _ in super_category_links.items():
-                uco3d_categories.add(category)
 
-    # check if the requested categories, super_categories, or modalities are valid
+    # check if the requested super_categories, or modalities are valid
     for sel_name, download_sel, possible in zip(
-        ("super_category", "category", "modality"),
-        (download_super_categories, download_categories, download_modalities),
-        (uco3d_super_categories, uco3d_categories, uco3d_modalities),
+        ("super_category", "modality"),
+        (download_super_categories, download_modalities),
+        (uco3d_super_categories, uco3d_modalities),
     ):
         if download_sel is not None:
             for sel in download_sel:
@@ -112,35 +115,32 @@ def download_dataset(
                         + f"Possible choices are: {str(possible)}."
                     )
 
-    def _is_for_download(modality: str, super_category: str, category: str) -> bool:
+    def _is_for_download(modality: str, super_category: str,) -> bool:
         if download_modalities is not None and modality not in download_modalities:
             return False
-        if (
-            download_super_categories is not None
-            and super_category in download_super_categories
-        ):
+        if download_super_categories is None:
             return True
-        if download_categories is not None and category not in download_categories:
-            return False
-        return True
+        if super_category in download_super_categories:
+            return True
+        return False
+
+    def _add_to_data_links(data_links, link_data):
+        # copy the link data and replace the filename with the actual link
+        link_data_with_link = copy.deepcopy(link_data)
+        link_data_with_link["download_url"] = links[link_data["filename"]]["download_url"]
+        data_links.append(link_data_with_link)
 
     # determine links to files we want to download
     data_links = []
-
-    def _add_to_data_links(link: str):
-        data_links.append((os.path.basename(link), link))
-        # data_links.append((f"part_{len(data_links):06d}.zip", link))
-
-    for modality, modality_links in links.items():
+    for modality, modality_links in category_to_archives.items():
         if modality == "metadata":
-            assert isinstance(modality_links, str)
-            _add_to_data_links(modality_links)
+            assert isinstance(modality_links, dict)
+            _add_to_data_links(data_links, modality_links)
             continue
         for super_category, super_category_links in modality_links.items():
-            for category, category_links in super_category_links.items():
-                if _is_for_download(modality, super_category, category):
-                    for l in category_links:
-                        _add_to_data_links(l)
+            if _is_for_download(modality, super_category):
+                for link_name, link_data in super_category_links.items():
+                    _add_to_data_links(data_links, link_data)
 
     # multiprocessing pool
     with _get_pool_fn(n_download_workers)(processes=n_download_workers) as download_pool:
@@ -152,7 +152,6 @@ def download_dataset(
                     _download_file,
                     download_folder,
                     checksum_check,
-                    sha256s_file,
                     skip_downloaded_archives,
                 ),
                 data_links,
@@ -196,6 +195,18 @@ def download_dataset(
     print("Done")
 
 
+def _sha256_file(path: str):
+    sha256_hash = hashlib.sha256()
+    with open(path, "rb") as f:
+        file_buffer = f.read(BLOCKSIZE)
+        while len(file_buffer) > 0:
+            sha256_hash.update(file_buffer)
+            file_buffer = f.read(BLOCKSIZE)
+    digest_ = sha256_hash.hexdigest()
+    return digest_
+
+
+
 def _get_in_progress_folder(download_folder: str):
     return os.path.join(download_folder, "_in_progress")
 
@@ -209,9 +220,9 @@ def _get_pool_fn(n_workers: int):
 def _unpack_file(
     download_folder: str,
     clear_archive: bool,
-    link: str,
+    link_data: dict,
 ):
-    link_name, _ = link
+    link_name = link_data["filename"]
     local_fl = os.path.join(download_folder, link_name)
     print(f"Unpacking dataset file {local_fl} ({link_name}) to {download_folder}.")
     # important, shutil.unpack_archive is not thread-safe:
@@ -224,11 +235,12 @@ def _unpack_file(
 def _download_file(
     download_folder: str,
     checksum_check: bool,
-    sha256s_file: Optional[str],
     skip_downloaded_files: bool,
-    link: str,
+    link_data: dict,
 ):
-    link_name, url = link
+    url = link_data["download_url"]
+    link_name = link_data["filename"]
+    sha256 = link_data["sha256sum"]
     local_fl_final = os.path.join(download_folder, link_name)
 
     if skip_downloaded_files and os.path.isfile(local_fl_final):
@@ -244,10 +256,7 @@ def _download_file(
     if checksum_check:
         print(f"Checking SHA256 for {local_fl}.")
         try:
-            check_uco3d_sha256(
-                local_fl,
-                sha256s_file=sha256s_file,
-            )
+            assert _sha256_file(local_fl)==sha256
         except AssertionError:
             warnings.warn(
                 f"Checksums for {local_fl} did not match!"

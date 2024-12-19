@@ -12,15 +12,16 @@ from download_dataset_impl import download_dataset
 
 
 DEFAULT_LINK_LIST_FILE = os.path.join(os.path.dirname(__file__), "links.json")
-DEFAULT_SHA256S_FILE = os.path.join(
-    os.path.dirname(__file__), "links/uco3d_sha256.json"
+DEFAULT_CATEGORY_TO_ARCHIVES_FILE = os.path.join(
+    os.path.dirname(__file__),
+    "category_to_archives_file.json",
 )
 
 
 def build_arg_parser(
     dataset_name: str,
     default_link_list_file: str,
-    default_sha256_file: str,
+    default_category_to_archives_file: str,
 ) -> ArgumentParser:
     parser = ArgumentParser(description=f"Download the {dataset_name} dataset.")
     parser.add_argument(
@@ -40,13 +41,6 @@ def build_arg_parser(
         type=int,
         default=4,
         help="The number of parallel workers for extracting the dataset files.",
-    )
-    parser.add_argument(
-        "--download_categories",
-        type=lambda x: [x_.strip() for x_ in x.split(",")],
-        default=None,
-        help=f"A comma-separated list of {dataset_name} categories to download."
-        + " Example: 'kettle,shampoo' will download only kettles and shampoos",
     )
     parser.add_argument(
         "--download_super_categories",
@@ -71,13 +65,10 @@ def build_arg_parser(
         help=(f"The file with html links to the {dataset_name} dataset files."),
     )
     parser.add_argument(
-        "--sha256_file",
+        "--category_to_archives_file",
         type=str,
-        default=default_sha256_file,
-        help=(
-            f"The file with SHA256 hashes of {dataset_name} dataset files."
-            + " In most cases the default local file `co3d_sha256.json` should be used."
-        ),
+        default=default_category_to_archives_file,
+        help=(f"The file with per-category zip files and their sha256 checksums."),
     )
     parser.add_argument(
         "--checksum_check",
@@ -113,19 +104,18 @@ if __name__ == "__main__":
     parser = build_arg_parser(
         "uCO3D",
         DEFAULT_LINK_LIST_FILE,
-        DEFAULT_SHA256S_FILE,
+        DEFAULT_CATEGORY_TO_ARCHIVES_FILE,
     )
     args = parser.parse_args()
     download_dataset(
+        str(args.category_to_archives_file),
         str(args.link_list_file),
         str(args.download_folder),
         n_download_workers=int(args.n_download_workers),
         n_extract_workers=int(args.n_extract_workers),
-        download_categories=args.download_categories,
         download_super_categories=args.download_super_categories,
         download_modalities=args.download_modalities,
         checksum_check=bool(args.checksum_check),
         clear_archives_after_unpacking=bool(args.clear_archives_after_unpacking),
-        sha256s_file=str(args.sha256_file),
         skip_downloaded_archives=not bool(args.redownload_existing_archives),
     )

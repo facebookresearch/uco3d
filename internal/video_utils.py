@@ -101,6 +101,7 @@ def make_video_mosaic(
     always_square=False,
     bg_fill: float = 1.0,
     rm_rows=False,
+    fps=20,
 ):
     """
     Write a single video containing a mosaic of input videos.
@@ -137,7 +138,7 @@ def make_video_mosaic(
         rm_rows=rm_rows,
     )
 
-    vw = VideoWriter(out_path=outpath)
+    vw = VideoWriter(out_path=outpath, fps=fps)
     for fri in tqdm(range(max_frames), total=max_frames, leave=None):
         frames = [f[min(fri, len(f) - 1)] for f in all_frames]
         if W == 1:

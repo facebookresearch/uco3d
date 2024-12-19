@@ -18,9 +18,6 @@ from uco3d.data_utils import get_all_load_dataset
 from collections import defaultdict
 
 
-# import logging
-# logging.basicConfig(level=logging.DEBUG)
-
 # To resolve memory leaks giving received 0 items from anecdata
 # Reference link https://github.com/pytorch/pytorch/issues/973
 torch.multiprocessing.set_sharing_strategy("file_system")
@@ -52,17 +49,22 @@ def iterate_dataset_worker(
             gaussian_splats_load_higher_order_harms=not fast_check,
             gaussian_splats_truncate_background=True,
             apply_alignment=not fast_check,
+            load_empty_point_cloud_if_missing=True,
         ),
         dataset_kwargs=dict(
+            subset_lists_file=None,
+            subsets=None,
+            # sqlite_metadata_file="/fsx-repligen/shared/datasets/uCO3D/dataset_export_tool/temp_database_1217_all/metadata_1734405665.4193773.sqlite",
+            # sqlite_metadata_file="/fsx-repligen/shared/datasets/uCO3D/dataset_export_tool/temp_database_1217_all/metadata_1734405665.4193773.sqlite",
+            sqlite_metadata_file="/fsx-repligen/shared/datasets/uCO3D/dataset_export_tool/temp_database_1218_all/metadata.sqlite",
+            # subset_lists_file=os.path.join(
+            #     dataset_root,
+            #     "set_lists",
+            #     "set_lists_all-categories.sqlite",
+            #     # "set_lists_3categories-debug.sqlite",
+            # ),
+            # subsets=["train", "val"],
             # subset_lists_file=None,
-            # subsets=None,
-            subset_lists_file=os.path.join(
-                dataset_root,
-                "set_lists",
-                "set_lists_all-categories.sqlite",
-                # "set_lists_3categories-debug.sqlite",
-            ),
-            subsets=["train", "val"],
         )  # this will load the whole dataset without any setlists
     )
     print("done loading dataset.")
@@ -72,7 +74,6 @@ def iterate_dataset_worker(
     idx_this_worker = idx_chunk[rank]
     
     if True:
-        
         # dataset = torch.utils.data.Subset(dataset, idx_this_worker)
         if specific_dataset_idx is not None:
             batch_sampler = [specific_dataset_idx]
@@ -164,6 +165,8 @@ def _analyze_logs(log_dir):
     seq_to_exc = {}
     seq_to_idx = {}
     
+    # step = False
+    
     for exc_file in tqdm(exc_files):
         with open(exc_file, "r") as f:
             exc_string = f.read()
@@ -171,10 +174,21 @@ def _analyze_logs(log_dir):
         with open(batch_file, "r") as f:
             batch_info = json.load(f)
         
-        seq_name = tuple(batch_info["batch_sequence_names"][0])
-        seq_to_exc[seq_name] = exc_string
-        seq_to_idx[seq_name] = batch_info["batch_indices"]
+        # for bidx, seq_name in zip(batch_info["batch_indices"], batch_info["batch_sequence_names"]):
+        # if "1-91152-9143" in seq_name[-1]:
+        #     step = True
+        # if step:
+        #     import pdb; pdb.set_trace()
         
+        n_seqs_in_batch = len(set(tuple(s) for s in batch_info["batch_sequence_names"]))
+        assert n_seqs_in_batch <= 2
+        
+        bix, seq_name = batch_info["batch_indices"][0], batch_info["batch_sequence_names"][0]
+        if n_seqs_in_batch==1:
+            if tuple(seq_name) not in seq_to_exc:
+                seq_to_exc[tuple(seq_name)] = exc_string
+                seq_to_idx[tuple(seq_name)] = batch_info["batch_indices"]
+    
         # exc_lines = exc_string.split()
         
         # if exc_lines[-1].endswith("/gaussian_splats/meta.json'"):
@@ -199,8 +213,9 @@ def _analyze_logs(log_dir):
         any_match = False
         for err_description, pat in (
             ("dataloader fail", r"RuntimeError: DataLoader worker (.*) exited unexpectedly"),
-            ("bad depth_maps file", r"self\.depth_map = crop_around_box(.*)squashed image"),
+            ("bad depth_maps file (depth map has wrong shape)", r"self\.depth_map = crop_around_box(.*)squashed image"),
             ("bad depth_maps file (KeyError)", r"h5py\.h5o\.open(.*)KeyError: \"Unable to open object"),
+            ("bad depth_maps file (KeyError)", r"h5py\.h5o\.open(.*)KeyError: \"Unable to synchronously open object"),
             ("missing segmented_point_cloud.py", r"FileNotFoundError: PointCloud file /fsx-repligen/shared/datasets/uCO3D/dataset_export/(.*)/segmented_point_cloud.ply (.*) does not exist."),
             ("missing gaussian splats meta.json", r"FileNotFoundError: \[Errno 2\] No such file or directory: \'/fsx-repligen/shared/datasets/uCO3D/dataset_export/(.*)/gaussian_splats/meta.json\'"),
             ("bad CRC-32 for centroids.npy", r"zipfile.BadZipFile: Bad CRC-32 for file \'centroids.npy\'"),
@@ -209,10 +224,13 @@ def _analyze_logs(log_dir):
             ("bad shape in gaussian splats meta.json", r"load_compressed_gaussians(.*)RuntimeError: shape(.*)is invalid for input of size(.*)"),
             ("missing mask_video.mkv", r"FileNotFoundError: Video /fsx-repligen/shared/datasets/uCO3D/dataset_export/(.*)/mask_video.mkv does not exist."),
             ("stop iteration", r"raise StopIteration"),
+            ("point cloud path None", r"ValueError: Point cloud path is None."),
+            ("depth maps path None", r"depth_h5_path = os.path.join(.*)argument must be str, bytes, or"),
+            ("mask video path None", r"fg_mask_np = self\._frame_from_video(.*)argument must be str, bytes, or"),
         ):
             match = re.compile(pat).search(exc.replace("\n", ""))
             if match is not None:
-                print(match.groups())
+                # print(match.groups())
                 any_match = True
                 err_description_to_seqs[err_description].append(seq)
                 if "stop iteration" in err_description:
@@ -220,6 +238,18 @@ def _analyze_logs(log_dir):
                     import pdb; pdb.set_trace()
                     pass
                 
+                if "missing gaussian splats meta.json" in err_description:
+                    meta_file = exc.split()[-1][1:-1]
+                    if "/".join(seq) not in meta_file:
+                        err_description_to_seqs[err_description].pop()
+                    # assert "/".join(seq) in meta_file, f"{'/'.join(seq)}, {meta_file}"
+                    # print(f"{seq}: {meta_file}")
+                    # import pdb; pdb.set_trace()
+                    # if "1-91152-9143" in meta_file:
+                    #     import pdb; pdb.set_trace()
+                    #     pass
+                    assert not os.path.isfile(meta_file)
+                    
                 if "missing segmented_point_cloud.py" in err_description:
                     pcl_file = str(match.groups()[1][3:])
                     assert not os.path.isfile(pcl_file)
@@ -232,6 +262,7 @@ def _analyze_logs(log_dir):
             pass
     
     print("\n\n\n\n----------\n\n\n\n")
+    err_description_to_seqs = dict(err_description_to_seqs)
     for err_description, seqs in err_description_to_seqs.items():
         print(err_description)
         for seq in seqs:
@@ -372,3 +403,6 @@ if __name__ == "__main__":
 # python ./test_iterate_whole_dataset.py --world_size 0 --log_dir="/fsx-repligen/dnovotny/datasets/uCO3D/uco3d_iterate_log_241216_debug/" --dataset_root="/fsx-repligen/shared/datasets/uCO3D/dataset_export/" --num_workers 0 --run_locally
 # python ./test_iterate_whole_dataset.py --world_size 0 --log_dir="/fsx-repligen/dnovotny/datasets/uCO3D/uco3d_iterate_log_241217_debug/" --dataset_root="/fsx-repligen/shared/datasets/uCO3D/dataset_export/" --num_workers 0 --run_locally
 # python ./test_iterate_whole_dataset.py --world_size 32 --log_dir="/fsx-repligen/dnovotny/datasets/uCO3D/uco3d_iterate_log_241218/" --dataset_root="/fsx-repligen/shared/datasets/uCO3D/dataset_export/" --num_workers 16
+# python ./test_iterate_whole_dataset.py --world_size 32 --log_dir="/fsx-repligen/dnovotny/datasets/uCO3D/uco3d_iterate_log_241218_newsqlite/" --dataset_root="/fsx-repligen/shared/datasets/uCO3D/dataset_export/" --num_workers 16
+# python ./test_iterate_whole_dataset.py --world_size 0 --log_dir="/fsx-repligen/dnovotny/datasets/uCO3D/uco3d_iterate_log_241218_newsqlite_debug/" --dataset_root="/fsx-repligen/shared/datasets/uCO3D/dataset_export/" --num_workers 0 --run_locally
+# python ./test_iterate_whole_dataset.py --world_size 32 --log_dir="/fsx-repligen/dnovotny/datasets/uCO3D/uco3d_iterate_log_241219/" --dataset_root="/fsx-repligen/shared/datasets/uCO3D/dataset_export/" --num_workers 16

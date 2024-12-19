@@ -354,6 +354,16 @@ class GaussianSplats:
     def __len__(self):
         return self.means.shape[0]
 
+    @classmethod
+    def empty(self, device: torch.device = torch.device("cpu")):
+        return GaussianSplats(
+            means=torch.empty(0, 3, device=device),
+            sh0=torch.empty(0, 3, device=device),
+            opacities=torch.empty(0, 1, device=device),
+            scales=torch.empty(0, 3, device=device),
+            quats=torch.empty(0, 4, device=device),
+        )
+
 
 def join_uco3d_cameras_as_batch(cameras_list: Sequence[Cameras]) -> Cameras:
     """

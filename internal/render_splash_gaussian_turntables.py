@@ -10,6 +10,7 @@ import dataclasses
 import os
 import math
 import random
+import json
 
 import numpy as np
 import torch
@@ -26,11 +27,18 @@ from uco3d import (
 
 
 def main():
-    output_root = "/fsx-repligen/dnovotny/visuals/uco3d_gauss_turntables_thr3p5/"
+    output_root = "/fsx-repligen/dnovotny/visuals/uco3d_gauss_turntables_thr3p5_clipscore_uptgt"
     num_scenes = 1000
+    debug = False
+    # truncate_gaussians_outside_sphere_thr = 3.5
+    # truncate_gaussians_outside_sphere_thr = 0.0
+    truncate_gaussians_outside_sphere_thr = 3.5
 
     # create output root folder
     outroot = output_root
+    if debug:
+        outroot = outroot + "debug"
+    
     os.makedirs(outroot, exist_ok=True)
 
     # obtain the dataset
@@ -49,50 +57,71 @@ def main():
             load_sparse_point_clouds=False,
             # -----------------------------------------------
         ),
-        set_lists_file_name="set_lists_static-categories-accurate-reconstruction.sqlite",
-    )
-    
-    # sort the sequences based on the reconstruction quality score
-    seq_annots = dataset.sequence_annotations()
-    sequence_name_to_score = {
-        sa.sequence_name: sa.reconstruction_quality.gaussian_splats for sa in seq_annots
-    }
-    sequence_name_to_score = dict(
-        sorted(
-            sequence_name_to_score.items(),
-            key=lambda item: item[1],
-            reverse=True,
+        set_lists_file_name=(
+            "set_lists_3categories-debug.sqlite"
+            if debug else
+            "set_lists_static-categories-accurate-reconstruction.sqlite"
         )
     )
     
-    supercat_to_sequence = defaultdict(list)
-    for sa in seq_annots:
-        supercat_to_sequence[sa.super_category].append(sa.sequence_name)
-    
-    sequences_show = []
-    n_per_supercat = int(math.ceil(num_scenes / len(supercat_to_sequence)))
-    for super_category, super_category_seqs in supercat_to_sequence.items():
-        sc_sequence_name_to_score = {
-            seq_name: sequence_name_to_score[seq_name]
-            for seq_name in super_category_seqs
+    if debug:
+        seq_annots = dataset.sequence_annotations()
+        sequences_show = [
+            sa.sequence_name for sa in seq_annots
+        ]
+        sequence_name_to_score = {}
+        
+    else:
+        
+        # sort the sequences based on the reconstruction quality score
+        scene_to_score = "/fsx-repligen/dnovotny/datasets/uCO3D/canonical_renders/v1_segmented=False/scene_to_score.json"
+        with open(scene_to_score, "r") as f:
+            scene_to_score = json.load(f)
+        
+        seq_annots = dataset.sequence_annotations()
+        # sequence_name_to_score = {
+        #     sa.sequence_name: sa.reconstruction_quality.gaussian_splats
+        # }
+        sequence_name_to_score = {
+            sa.sequence_name: scene_to_score[sa.sequence_name]
+            for sa in seq_annots
         }
-        sc_sequence_name_to_score = dict(
+        sequence_name_to_score = dict(
             sorted(
-                sc_sequence_name_to_score.items(),
+                sequence_name_to_score.items(),
                 key=lambda item: item[1],
                 reverse=True,
             )
         )
-        sequences_show.extend(list(sc_sequence_name_to_score.keys())[:n_per_supercat])
+        
+        supercat_to_sequence = defaultdict(list)
+        for sa in seq_annots:
+            supercat_to_sequence[sa.super_category].append(sa.sequence_name)
+        
+        sequences_show = []
+        n_per_supercat = int(math.ceil(num_scenes / len(supercat_to_sequence)))
+        for super_category, super_category_seqs in supercat_to_sequence.items():
+            sc_sequence_name_to_score = {
+                seq_name: sequence_name_to_score[seq_name]
+                for seq_name in super_category_seqs
+            }
+            sc_sequence_name_to_score = dict(
+                sorted(
+                    sc_sequence_name_to_score.items(),
+                    key=lambda item: item[1],
+                    reverse=True,
+                )
+            )
+            sequences_show.extend(list(sc_sequence_name_to_score.keys())[:n_per_supercat])
         
     print(len(sequences_show))
     random.shuffle(sequences_show)
-        
+    
     # iterate over sequences and render a 360 video of each
     for seqi, seq_name in enumerate(tqdm(sequences_show)):
         if seqi >= int(num_scenes):
             break
-        print(f"Rendering {seq_name}: {sequence_name_to_score[seq_name]}")
+        print(f"Rendering {seq_name}: {sequence_name_to_score.get(seq_name, -100.0)}")
         outfile = os.path.join(outroot, seq_name + ".mp4")
         if os.path.exists(outfile):
             print(f"Skipping {outfile}, already exists.")
@@ -101,7 +130,11 @@ def main():
         frame_data = dataset[dataset_idx]
         assert seq_name == frame_data.sequence_name
         print(f"Rendering gaussians of sequence {seq_name}.")
-        _render_gaussians(frame_data, outfile)
+        _render_gaussians(
+            frame_data,
+            outfile,
+            truncate_gaussians_outside_sphere_thr=truncate_gaussians_outside_sphere_thr,
+        )
         print(f"Wrote video {os.path.abspath(outfile)}.")
 
 
@@ -113,10 +146,13 @@ def _render_gaussians(
     truncate_gaussians_outside_sphere_thr: float = 3.5,
 ):
     # truncate gaussians outside a spherical boundary
-    splats_truncated = _truncate_gaussians_outside_sphere(
-        frame_data.sequence_gaussian_splats,
-        truncate_gaussians_outside_sphere_thr,
-    )
+    if truncate_gaussians_outside_sphere_thr > 0:
+        splats_truncated = _truncate_gaussians_outside_sphere(
+            frame_data.sequence_gaussian_splats,
+            truncate_gaussians_outside_sphere_thr,
+        )
+    else:
+        splats_truncated = frame_data.sequence_gaussian_splats
 
     # generate a circular camera path
     camera_matrix, viewmats = _generate_circular_path(n_frames=n_frames)
@@ -181,9 +217,11 @@ def _generate_circular_path(
     n_frames: int = 120,
     focal_ndc: float = 2.0,
     height: float = 7.0,
-    radius: float = 10.0,
+    # radius: float = 10.0,
+    radius: float = 6.0,
     up=np.array([0, -1, 0]),
-    cam_tgt=np.zeros(3),
+    # cam_tgt=np.zeros(3),
+    cam_tgt=np.array([0.0, 1.0, 0.0]),
 ):
     """Calculates a circular path for rendering."""
     render_poses = []
