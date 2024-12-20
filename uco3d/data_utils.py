@@ -24,9 +24,10 @@ def get_all_load_dataset(
     set_lists_file_name: str = "set_lists_3categories-debug.sqlite",
 ) -> UCO3DDataset:
     """
-    Get a UCO3D dataset with all data loading flags set to True.
+    Get a UCO3D dataset with all data loading flags set to True, except the
+    depth map loading (by default, the download script does not download depth maps).
     Make sure to set the environment variable for UCO3D_DATASET_ROOT
-    to the root of the dataset.
+    to the root folder of the dataset.
 
     Note:
         By default the code loads the small debug subset of uCO3D.
@@ -59,7 +60,7 @@ def get_all_load_dataset(
         **dict(
             apply_alignment=True,
             load_images=True,
-            load_depths=True,
+            load_depths=False,
             load_masks=True,
             load_depth_masks=True,
             load_gaussian_splats=True,

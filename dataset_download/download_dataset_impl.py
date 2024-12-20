@@ -32,7 +32,16 @@ def download_dataset(
     n_download_workers: int = 4,
     n_extract_workers: int = 4,
     download_super_categories: Optional[List[str]] = None,
-    download_modalities: Optional[List[str]] = None,
+    download_modalities: Optional[List[str]] = [
+        "metadata",
+        # "depth_maps",   # by default we do not download depth maps!
+        "rgb_videos",
+        "mask_videos",
+        "gaussian_splats",
+        "point_clouds",
+        "sparse_point_clouds",
+        "segmented_point_clouds",
+    ],
     checksum_check: bool = False,
     clear_archives_after_unpacking: bool = False,
     skip_downloaded_archives: bool = True,
@@ -42,7 +51,7 @@ def download_dataset(
 
     Note: The script will make a folder `<download_folder>/_in_progress`, which
         stores files whose download is in progress. The folder can be safely deleted
-        the download is finished.
+        once the download is finished.
 
     Args:
         link_list_file: A text file with the list of zip file download links.
@@ -53,8 +62,6 @@ def download_dataset(
         n_extract_workers: The number of parallel workers
             for extracting the dataset files.
         download_super_categories: A list of super categories to download.
-            If `None`, downloads all.
-        download_categories: A list of categories to download.
             If `None`, downloads all.
         download_modalities: A list of modalities to download.
             If `None`, downloads all.
