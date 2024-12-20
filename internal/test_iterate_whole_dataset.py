@@ -50,6 +50,7 @@ def iterate_dataset_worker(
             gaussian_splats_truncate_background=True,
             apply_alignment=not fast_check,
             load_empty_point_cloud_if_missing=True,
+            load_depth=True,
         ),
         dataset_kwargs=dict(
             subset_lists_file=None,
