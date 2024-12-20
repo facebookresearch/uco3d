@@ -14,7 +14,7 @@ from download_dataset_impl import download_dataset
 DEFAULT_LINK_LIST_FILE = os.path.join(os.path.dirname(__file__), "links.json")
 DEFAULT_CATEGORY_TO_ARCHIVES_FILE = os.path.join(
     os.path.dirname(__file__),
-    "category_to_archives_file.json",
+    "category_to_archives.json",
 )
 
 

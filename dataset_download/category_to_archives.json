@@ -1,0 +1,260 @@
+{
+    "metadata": {
+        "filename": "metadata.zip",
+        "sha256sum": "b9709c203bd5fdbe795eb6a734e5bf83b42b50f52ecb0133beb0b6fd155e90fb",
+        "file_size_bytes": 4930428153,
+        "download_url": null
+    },
+    "depth_maps": {
+        "baby_and_toddler_items": {
+            "part_depth_maps_0001.zip": {
+                "filename": "part_depth_maps_0001.zip",
+                "sha256sum": "e8bf72bd2679364d95d1246a58b34e6c043d49a72acf0aa65d90917b014ceda1",
+                "file_size_bytes": 20555302095,
+                "download_url": null
+            },
+            "part_depth_maps_0002.zip": {
+                "filename": "part_depth_maps_0002.zip",
+                "sha256sum": "0d6c1fd13f11522a932b54f6e7b2c7b3cb3623dcc86ae63a2e55c88e270787d9",
+                "file_size_bytes": 21028527352,
+                "download_url": null
+            },
+            "part_depth_maps_0003.zip": {
+                "filename": "part_depth_maps_0003.zip",
+                "sha256sum": "c89009625ad724853b4ba2c6e7ff9d025e77fe55733e25bbed3a315e611a313a",
+                "file_size_bytes": 9566764374,
+                "download_url": null
+            }
+        },
+        "plants_and_other": {
+            "part_depth_maps_0004.zip": {
+                "filename": "part_depth_maps_0004.zip",
+                "sha256sum": "95b7f47ae0062abc568378c35491cd1c0d10a578336a237259855f808eb69c1e",
+                "file_size_bytes": 20457492658,
+                "download_url": null
+            },
+            "part_depth_maps_0005.zip": {
+                "filename": "part_depth_maps_0005.zip",
+                "sha256sum": "3a707130c6ba9e0f483290a6c4dc279c8b59355c0f2e51148d8fa4af7151799d",
+                "file_size_bytes": 12296698801,
+                "download_url": null
+            }
+        }
+    },
+    "gaussian_splats": {
+        "baby_and_toddler_items": {
+            "part_gaussian_splats_0001.zip": {
+                "filename": "part_gaussian_splats_0001.zip",
+                "sha256sum": "d1ebdd59aab0c38c8c06b1b3202aa1f5917edd9707dce9e970e5371ee21ddb0a",
+                "file_size_bytes": 2228252137,
+                "download_url": null
+            },
+            "part_gaussian_splats_0002.zip": {
+                "filename": "part_gaussian_splats_0002.zip",
+                "sha256sum": "bc3fbc26a4a065cd1f35ad2a330623d0ef9af3de2703457ee8d39f9f46af5ea8",
+                "file_size_bytes": 1893451706,
+                "download_url": null
+            },
+            "part_gaussian_splats_0003.zip": {
+                "filename": "part_gaussian_splats_0003.zip",
+                "sha256sum": "7c0f4950e6716d29eb6b19acebedf590dc82e8683c6e9b2adda3106fab977f86",
+                "file_size_bytes": 1178334972,
+                "download_url": null
+            }
+        },
+        "plants_and_other": {
+            "part_gaussian_splats_0004.zip": {
+                "filename": "part_gaussian_splats_0004.zip",
+                "sha256sum": "8b1703786fd3e598168629ad9a2f6a92762d36dc5c7f8be1f6e2bdef1db3c96d",
+                "file_size_bytes": 2689672223,
+                "download_url": null
+            },
+            "part_gaussian_splats_0005.zip": {
+                "filename": "part_gaussian_splats_0005.zip",
+                "sha256sum": "6dc00495bcb24dd7f3a07c0930da7a27a82addb1d5e3e175ee99850c96ebde8f",
+                "file_size_bytes": 1380184125,
+                "download_url": null
+            }
+        }
+    },
+    "mask_videos": {
+        "baby_and_toddler_items": {
+            "part_mask_videos_0001.zip": {
+                "filename": "part_mask_videos_0001.zip",
+                "sha256sum": "8746bc87bb4e1bd118616f14909e0f6289109b7e203e129363eab444e6058240",
+                "file_size_bytes": 397063089,
+                "download_url": null
+            },
+            "part_mask_videos_0002.zip": {
+                "filename": "part_mask_videos_0002.zip",
+                "sha256sum": "9ed6b5d179e646aee1cbc8a1334f74050d05f85dc02f4ab7844f1ed351737ea6",
+                "file_size_bytes": 417022903,
+                "download_url": null
+            },
+            "part_mask_videos_0003.zip": {
+                "filename": "part_mask_videos_0003.zip",
+                "sha256sum": "a8e53f313f4ad794e8cdcc6ffd254552aa820202207e5722d49f206f7a4613d0",
+                "file_size_bytes": 211752808,
+                "download_url": null
+            }
+        },
+        "plants_and_other": {
+            "part_mask_videos_0004.zip": {
+                "filename": "part_mask_videos_0004.zip",
+                "sha256sum": "edbce0774f5d32ee86c6f6f49e602546a32fe5761024cfc5bd41c2167e10c8d7",
+                "file_size_bytes": 328901349,
+                "download_url": null
+            },
+            "part_mask_videos_0005.zip": {
+                "filename": "part_mask_videos_0005.zip",
+                "sha256sum": "1f05005eee719090a0fe59bb45c209a1b808193465872f1d28e69ca60bc049b0",
+                "file_size_bytes": 305722734,
+                "download_url": null
+            }
+        }
+    },
+    "point_clouds": {
+        "baby_and_toddler_items": {
+            "part_point_clouds_0001.zip": {
+                "filename": "part_point_clouds_0001.zip",
+                "sha256sum": "99f4b84a3620e00e8b1ab0e40fdc4c1d6b289f3e3e2b79170308f05e4857294b",
+                "file_size_bytes": 784532341,
+                "download_url": null
+            },
+            "part_point_clouds_0002.zip": {
+                "filename": "part_point_clouds_0002.zip",
+                "sha256sum": "9eda24db383d909bb542ab1f49b31af1608e7b64556de203d915588b5514aa53",
+                "file_size_bytes": 1251749616,
+                "download_url": null
+            },
+            "part_point_clouds_0003.zip": {
+                "filename": "part_point_clouds_0003.zip",
+                "sha256sum": "9883093ea79cb7d4ae1238bfb353a59a0218ca316615bf621754b399d010dfcc",
+                "file_size_bytes": 930895952,
+                "download_url": null
+            }
+        },
+        "plants_and_other": {
+            "part_point_clouds_0004.zip": {
+                "filename": "part_point_clouds_0004.zip",
+                "sha256sum": "d57cfa74203ed26e297182b6b5b9c98f461929bfce3b48c146c16fd1f57b2b8c",
+                "file_size_bytes": 737536913,
+                "download_url": null
+            },
+            "part_point_clouds_0005.zip": {
+                "filename": "part_point_clouds_0005.zip",
+                "sha256sum": "a6ee877ef6f8cb1207473e9e9ee9ee702e676e5c16546bad366d488cc2958fbb",
+                "file_size_bytes": 1005200957,
+                "download_url": null
+            }
+        }
+    },
+    "rgb_videos": {
+        "baby_and_toddler_items": {
+            "part_rgb_videos_0001.zip": {
+                "filename": "part_rgb_videos_0001.zip",
+                "sha256sum": "238ff8d52e7ec433ccd2b5b43d6f65ad571d0f617f29e856a10b5445975a0389",
+                "file_size_bytes": 21110923011,
+                "download_url": null
+            },
+            "part_rgb_videos_0002.zip": {
+                "filename": "part_rgb_videos_0002.zip",
+                "sha256sum": "ccc142dc272d7b795546328ec5a6f6bf71da0dfef101860f67cacdd741b90b56",
+                "file_size_bytes": 12924559720,
+                "download_url": null
+            },
+            "part_rgb_videos_0003.zip": {
+                "filename": "part_rgb_videos_0003.zip",
+                "sha256sum": "b8e7ecf87e19acc81b12e4e5b58b59a9882d2c49381b1137cc22b51561ba2c3e",
+                "file_size_bytes": 4485870578,
+                "download_url": null
+            }
+        },
+        "plants_and_other": {
+            "part_rgb_videos_0004.zip": {
+                "filename": "part_rgb_videos_0004.zip",
+                "sha256sum": "cb57719ac0ea7980c6de8a27365db129c154697acb70f902a0db152737bde950",
+                "file_size_bytes": 21164613085,
+                "download_url": null
+            },
+            "part_rgb_videos_0005.zip": {
+                "filename": "part_rgb_videos_0005.zip",
+                "sha256sum": "d6656ff487dbde4c8f67da64e8f5fd1742e52420360bd6b4bfc711a1624a2a06",
+                "file_size_bytes": 9334588027,
+                "download_url": null
+            }
+        }
+    },
+    "segmented_point_clouds": {
+        "baby_and_toddler_items": {
+            "part_segmented_point_clouds_0001.zip": {
+                "filename": "part_segmented_point_clouds_0001.zip",
+                "sha256sum": "69864ce225ceb67b258fe21488eb8db22e04cebd6c950d9039599e99a9b618b0",
+                "file_size_bytes": 78920908,
+                "download_url": null
+            },
+            "part_segmented_point_clouds_0002.zip": {
+                "filename": "part_segmented_point_clouds_0002.zip",
+                "sha256sum": "1b7d4a5416e55489f349f486bd0268ac587919c79ef8d729d01196f369b62630",
+                "file_size_bytes": 149103662,
+                "download_url": null
+            },
+            "part_segmented_point_clouds_0003.zip": {
+                "filename": "part_segmented_point_clouds_0003.zip",
+                "sha256sum": "2c3c48de40149e2f3ae26006c46e1116ae8d45b9bad818a2f38dcf9d1f700b80",
+                "file_size_bytes": 78068483,
+                "download_url": null
+            }
+        },
+        "plants_and_other": {
+            "part_segmented_point_clouds_0004.zip": {
+                "filename": "part_segmented_point_clouds_0004.zip",
+                "sha256sum": "6f6a560c3886f57b541f398b5a978f518147658bc40efe3920245dc7d099a75d",
+                "file_size_bytes": 45894457,
+                "download_url": null
+            },
+            "part_segmented_point_clouds_0005.zip": {
+                "filename": "part_segmented_point_clouds_0005.zip",
+                "sha256sum": "401beb997a9409abcd3d15879f5675dcd049829fdd3c51906fd83192736b1cd5",
+                "file_size_bytes": 56001034,
+                "download_url": null
+            }
+        }
+    },
+    "sparse_point_clouds": {
+        "baby_and_toddler_items": {
+            "part_sparse_point_clouds_0001.zip": {
+                "filename": "part_sparse_point_clouds_0001.zip",
+                "sha256sum": "a8af7e84c59f518cd3da4f6f823a2dee0ab72d669f9359f76070c704164ad192",
+                "file_size_bytes": 57403688,
+                "download_url": null
+            },
+            "part_sparse_point_clouds_0002.zip": {
+                "filename": "part_sparse_point_clouds_0002.zip",
+                "sha256sum": "facbd8f088717c75844452f3a952dc610952293afa31b1ebb8e4947c06ec11db",
+                "file_size_bytes": 92424497,
+                "download_url": null
+            },
+            "part_sparse_point_clouds_0003.zip": {
+                "filename": "part_sparse_point_clouds_0003.zip",
+                "sha256sum": "702a3bf79cab322918f77bc70116e6b4e7b3603f806080fe40fac2f64cbcd408",
+                "file_size_bytes": 71748991,
+                "download_url": null
+            }
+        },
+        "plants_and_other": {
+            "part_sparse_point_clouds_0004.zip": {
+                "filename": "part_sparse_point_clouds_0004.zip",
+                "sha256sum": "9ed300feb0cb2ac42680cd451479a4677304a96aad981d02082c79d124e34a2e",
+                "file_size_bytes": 53600045,
+                "download_url": null
+            },
+            "part_sparse_point_clouds_0005.zip": {
+                "filename": "part_sparse_point_clouds_0005.zip",
+                "sha256sum": "e0b126c8604c1375f3d8a896c19a6d23beac64c103d1eb585bbecbc67d5bdd10",
+                "file_size_bytes": 77310189,
+                "download_url": null
+            }
+        }
+    }
+}
