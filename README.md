@@ -354,6 +354,7 @@ This project uses code from other sources, which are licensed under their respec
 - [gsplat-convert](https://github.com/Ending2015a/gsplat-convert)
 
 # Reference
+
 If you use our dataset, please use the following citation:
 ```bibtex
 @inproceedings{liu24uco3d,
