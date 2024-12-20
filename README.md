@@ -27,7 +27,7 @@ The dataset is described in our paper ["UnCommon Objects in 3D"](TODO).
 
 # Download & Install
 
-The full dataset (processed version) takes **XXX TB of space**. We distribute it in chunks up to 20 GB. We provide an automated way of downloading and decompressing the data.
+The full dataset (processed version) takes **~20 TB of space**. We distribute it in chunks up to 20 GB. We provide an automated way of downloading and decompressing the data.
 
 First, run the install script that will also take care of dependencies:
 
