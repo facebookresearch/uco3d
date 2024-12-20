@@ -11,7 +11,6 @@ import os
 import time
 import urllib
 import warnings
-from collections import defaultdict
 
 from dataclasses import dataclass
 from typing import (
@@ -284,7 +283,7 @@ class UCO3DDataset:
 
             seq, frame = self._index.index[frame_idx]
         elif isinstance(frame_idx, (tuple, list)):
-            seq, frame, *rest = frame_idx
+            seq, frame, *_ = frame_idx
 
             if isinstance(frame, torch.LongTensor):
                 frame = frame.item()
@@ -323,51 +322,6 @@ class UCO3DDataset:
     def __str__(self) -> str:
         # pyre-ignore[16]
         return f"SqlIndexDataset #frames={len(self._index)}"
-
-    def category_to_sequence_names(self) -> Dict[str, List[str]]:
-        """
-        Returns a dict mapping from each dataset category to a list of its
-        sequence names.
-
-        Returns:
-            category_to_sequence_names: Dict {category_i: [..., sequence_name_j, ...]}
-        """
-        c2seq = defaultdict(list)
-        for sequence_name in self.sequence_names():
-            first_frame_idx = next(self.sequence_indices_in_order(sequence_name))
-            # crashes without overriding __getitem__
-            sequence_category = self[first_frame_idx].sequence_category
-            c2seq[sequence_category].append(sequence_name)
-        return dict(c2seq)
-
-    def sequence_frames_in_order(
-        self, seq_name: str, subset_filter: Optional[Sequence[str]] = None
-    ) -> Iterator[Tuple[float, int, int]]:
-        """Returns an iterator over the frame indices in a given sequence.
-        We attempt to first sort by timestamp (if they are available),
-        then by frame number.
-
-        Args:
-            seq_name: the name of the sequence.
-
-        Returns:
-            an iterator over triplets `(timestamp, frame_no, dataset_idx)`,
-                where `frame_no` is the index within the sequence, and
-                `dataset_idx` is the index within the dataset.
-                `None` timestamps are replaced with 0s.
-        """
-        # pyre-ignore[16]
-        seq_frame_indices = self._seq_to_idx[seq_name]
-        nos_timestamps = self.get_frame_numbers_and_timestamps(
-            seq_frame_indices, subset_filter
-        )
-
-        yield from sorted(
-            [
-                (timestamp, frame_no, idx)
-                for idx, (frame_no, timestamp) in zip(seq_frame_indices, nos_timestamps)
-            ]
-        )
 
     def sequence_indices_in_order(
         self, seq_name: str, subset_filter: Optional[Sequence[str]] = None
