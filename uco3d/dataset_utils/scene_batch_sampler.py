@@ -16,7 +16,7 @@ from torch.utils.data.sampler import Sampler
 from ..uco3d_dataset import UCO3DDataset
 
 
-@dataclass(eq=False)  # TODO: do we need this if not init from config?
+@dataclass(eq=False)
 class SceneBatchSampler(Sampler[List[int]]):
     """
     A class for sampling training batches with a controlled composition

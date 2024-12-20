@@ -1,10 +1,6 @@
 # TODO: since we do not use Implicitron, just gather all low-level types in one file!
 # make sure it is exactly the same file as in the exporter!
 
-import warnings
-from typing import Optional, Tuple
-
-# from sqlalchemy import LargeBinary
 from sqlalchemy.orm import (
     composite,
     DeclarativeBase,
@@ -122,7 +118,6 @@ class UCO3DSequenceAnnotation(Base):
         mapped_column("_gaussian_splats_n_gaussians", nullable=True),
     )
 
-    # TODO: Use this instead of the hack below!
     reconstruction_quality: Mapped[ReconstructionQualityAnnotation] = composite(
         mapped_column("_reconstruction_quality_viewpoint", nullable=True),
         mapped_column("_reconstruction_quality_gaussian_splats", nullable=True),

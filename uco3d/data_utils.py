@@ -31,28 +31,16 @@ def get_all_load_dataset(
 
     Note:
         By default the code loads the small debug subset of uCO3D.
-        Make sure to set dataset_kwargs correctly if you wish to load
-        a bigger dataset instead. E.g., the following will load the
-        whole dataset:
-        ```python
-        get_all_load_dataset(
-            dataset_kwargs={
-                "subset_lists_file": os.path.join(
-                    dataset_root,
-                    "set_lists",
-                    "set_lists_all-categories.sqlite",
-                ),
-            },
-            frame_data_builder_kwargs={},
-        )
-        ```
+        Make sure to set set_lists_file_name to another file name if you wish to load
+        a bigger dataset instead. E.g. pass `"set_lists_all-categories.sqlite"` in order
+        to load the whole dataset.
 
     Args:
         dataset_kwargs: Additional keyword arguments to pass to the
             UCO3DDataset constructor.
         frame_data_builder_kwargs: Additional keyword arguments to
             pass to the UCO3DFrameDataBuilder constructor.
-        set_lists_file_name: The name of the set lists file to use.
+        set_lists_file_name: The basename of the set lists file to use.
     Returns:
         A UCO3DDataset object.
     """
@@ -110,22 +98,22 @@ def load_whole_sequence(
     random_frames: bool = False,
 ) -> UCO3DFrameData:
     """
-    Load a whole sequence from a UCO3D dataset into a single
+    Load a whole sequence from a UCO3D dataset into a single batched
     FrameData object.
 
     Args:
         dataset: The UCO3D dataset to load from.
         seq_name: The name of the sequence to load.
-        max_frames: The maximum number of frames to load.
+        max_frames: The maximum number of frames to load. Pass 0 to load all frames.
         num_workers: The number of workers to use for data loading.
-        random_frames: If True, randomly select frames from the sequence.
-            Otherwise, select frames in order.
+        random_frames: If True, randomly select max_frames from the sequence.
+            Otherwise, select uniformly sampled max_frames in order.
     Returns:
         A FrameData object containing the loaded data.
     """
     seq_idx = dataset.sequence_indices_in_order(seq_name)
     seq_idx = list(seq_idx)
-    if max_frames > 0 and len(seq_idx) > max_frames:
+    if 0 < max_frames < len(seq_idx):
         if random_frames:
             sel = torch.randperm(len(seq_idx))[:max_frames]
         else:

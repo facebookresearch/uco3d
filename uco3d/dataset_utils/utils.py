@@ -27,8 +27,8 @@ UCO3D_DATASET_ROOT_ENV_VAR = "UCO3D_DATASET_ROOT"
 def get_dataset_root(assert_exists: bool = False) -> str:
     """
     Returns the root directory of the UCO3D dataset.
-    If the environment variable stored in UCO3D_DATASET_ROOT_ENV_VAR is set"
-    it will be used. Otherwise, a None is returned.
+    If the environment variable stored in UCO3D_DATASET_ROOT_ENV_VAR is set,
+    it will be used. Otherwise, None is returned.
 
     Args:
         assert_exists: If True, the function will raise an error if the

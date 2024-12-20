@@ -8,7 +8,7 @@
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field, fields
-from typing import Any, List, Mapping, Optional, Union
+from typing import Any, List, Mapping, Optional
 
 import numpy as np
 import torch
@@ -119,43 +119,43 @@ class UCO3DFrameData(Mapping[str, Any]):
     """
 
     frame_number: Optional[torch.LongTensor]
-    sequence_name: Union[str, List[str]]
-    sequence_category: Union[str, List[str], None] = None
-    sequence_super_category: Union[str, List[str], None] = None
+    sequence_name: str | List[str]
+    sequence_category: str | List[str] | None = None
+    sequence_super_category: str | List[str] | None = None
     frame_timestamp: Optional[torch.Tensor] = None
     image_size_hw: Optional[torch.LongTensor] = None
     effective_image_size_hw: Optional[torch.LongTensor] = None
-    image_path: Union[str, List[str], None] = None
+    image_path: str | List[str] | None = None
     image_rgb: Optional[torch.Tensor] = None
     # masks out padding added due to cropping the square bit
     mask_crop: Optional[torch.Tensor] = None
-    depth_path: Union[str, List[str], None] = None
+    depth_path: str | List[str] | None = None
     depth_map: Optional[torch.Tensor] = None
     depth_mask: Optional[torch.Tensor] = None
     depth_scale_adjustment: Optional[torch.Tensor] = None
-    mask_path: Union[str, List[str], None] = None
+    mask_path: str | List[str] | None = None
     fg_probability: Optional[torch.Tensor] = None
     bbox_xywh: Optional[torch.Tensor] = None
     crop_bbox_xywh: Optional[torch.Tensor] = None
     camera: Optional[Cameras] = None
     camera_quality_score: Optional[torch.Tensor] = None
     # point clouds
-    sequence_point_cloud_path: Union[str, List[str], None] = None
+    sequence_point_cloud_path: str | List[str] | None = None
     sequence_point_cloud: PointCloud | list[PointCloud] | None = None
     sequence_point_cloud_idx: Optional[torch.Tensor] = None
-    sequence_segmented_point_cloud_path: Union[str, List[str], None] = None
+    sequence_segmented_point_cloud_path: str | List[str] | None = None
     sequence_segmented_point_cloud: PointCloud | list[PointCloud] | None = None
     sequence_segmented_point_cloud_idx: Optional[torch.Tensor] = None
-    sequence_sparse_point_cloud_path: Union[str, List[str], None] = None
+    sequence_sparse_point_cloud_path: str | List[str] | None = None
     sequence_sparse_point_cloud: PointCloud | list[PointCloud] | None = None
     sequence_sparse_point_cloud_idx: Optional[torch.Tensor] = None
     # gauss splats
-    sequence_gaussian_splats_path: Union[str, List[str], None] = None
+    sequence_gaussian_splats_path: str | List[str] | None = None
     sequence_gaussian_splats: GaussianSplats | list[GaussianSplats] | None = None
     sequence_gaussian_splats_idx: Optional[torch.Tensor] = None
     gaussian_splats_quality_score: Optional[torch.Tensor] = None
     #
-    frame_type: Union[str, List[str], None] = None  # known | unseen
+    frame_type: str | List[str] | None = None
     sequence_caption: Optional[str] = None
     sequence_short_caption: Optional[str] = None
     meta: dict = field(default_factory=lambda: {})

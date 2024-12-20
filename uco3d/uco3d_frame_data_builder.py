@@ -218,8 +218,8 @@ class UCO3DFrameDataBuilder:
             frame_data.camera = self._get_uco3d_camera(frame_annotation)
 
         mask_annotation = frame_annotation.mask
+        fg_mask_np: Optional[np.ndarray] = None
         if mask_annotation is not None:
-            fg_mask_np: Optional[np.ndarray] = None
             if load_blobs and self.load_masks:
                 mask_image_load_start_time = time.time()
                 if self.load_frames_from_videos:
@@ -292,30 +292,16 @@ class UCO3DFrameDataBuilder:
         # Load depth map from depth_video.mkv
         if load_blobs and self.load_depths:
             if self.load_frames_from_videos:
-                (
-                    depth_map,
-                    depth_path,
-                    depth_mask,
-                ) = self._load_mask_depth_from_video(
-                    frame_annotation,
-                    sequence_annotation,
-                    frame_data.fg_probability,
+                depth_map, depth_path, depth_mask = self._load_mask_depth_from_video(
+                    frame_annotation, sequence_annotation, fg_mask_np
                 )
             else:
-                (
-                    depth_map,
-                    depth_path,
-                    depth_mask,
-                ) = self._load_mask_depth_from_file(
-                    frame_annotation,
-                    frame_data.fg_probability,
+                depth_map, depth_path, depth_mask = self._load_mask_depth_from_file(
+                    frame_annotation, fg_mask_np
                 )
 
             # apply the scale adjustment
             depth_map = depth_map * frame_annotation._depth_scale_adjustment
-
-            # remove infinite values
-            depth_map[~torch.isfinite(depth_map)] = 0.0
 
             # finally assign to frame_data
             frame_data.depth_scale_adjustment = frame_annotation._depth_scale_adjustment
@@ -324,39 +310,38 @@ class UCO3DFrameDataBuilder:
             frame_data.depth_mask = depth_mask
 
         # load all possible types of point clouds
-        if load_blobs:
-            for pcl_type_str in ["", "sparse_", "segmented_"]:
-                pcl_start = time.time()
-                do_load_pcl = getattr(self, f"load_{pcl_type_str}point_clouds")
-                if not do_load_pcl:
-                    continue
-                pcl_annot = getattr(
-                    sequence_annotation,
-                    f"{pcl_type_str}point_cloud",
-                    None,
-                )
-                assert pcl_annot is not None
-                pcl_path = (
-                    os.path.join(self.dataset_root, pcl_annot.path)
-                    if pcl_annot.path is not None
-                    else None
-                )
-                point_cloud = self._load_point_cloud(pcl_path)
-                setattr(
-                    frame_data, f"sequence_{pcl_type_str}point_cloud_path", pcl_path
-                )
-                setattr(frame_data, f"sequence_{pcl_type_str}point_cloud", point_cloud)
-                logger.debug(
-                    f"{pcl_type_str}point_cloud load time {time.time()-pcl_start:.5f}"
-                )
+        for pcl_type_str in ["", "sparse_", "segmented_"]:
+            if not load_blobs or not getattr(self, f"load_{pcl_type_str}point_clouds"):
+                continue
 
-        # warnings.warn("Test gaussian splat loading!")
+            pcl_start = time.time()
+            pcl_annot = getattr(
+                sequence_annotation,
+                f"{pcl_type_str}point_cloud",
+                None,
+            )
+            assert pcl_annot is not None
+            pcl_path = (
+                os.path.join(self.dataset_root, pcl_annot.path)
+                if pcl_annot.path is not None
+                else None
+            )
+            point_cloud = self._load_point_cloud(pcl_path)
+            setattr(
+                frame_data, f"sequence_{pcl_type_str}point_cloud_path", pcl_path
+            )
+            setattr(frame_data, f"sequence_{pcl_type_str}point_cloud", point_cloud)
+            logger.debug(
+                f"{pcl_type_str}point_cloud load time {time.time()-pcl_start:.5f}"
+            )
+
         if load_blobs and self.load_gaussian_splats:
             gauss_start = time.time()
             if sequence_annotation.gaussian_splats.dir is None:
                 warnings.warn(
                     f"No Gaussian splats annotation found for {frame_data.sequence_name}!"
-                    " Returning empty Gaussian splats."
+                    " Returning empty Gaussian splats. Suppressing"
+                    " future warnings."
                 )
                 sequence_gaussians = GaussianSplats.empty()
             else:
@@ -405,8 +390,6 @@ class UCO3DFrameDataBuilder:
         # obtain align transform
         R, T, s = self._get_alignment_transform(sequence_annotation)
 
-        # camera_before = copy.deepcopy(frame_data.camera)
-
         # align the camera using the align transform
         frame_data.camera.R = R.transpose(-1, -2) @ frame_data.camera.R
         frame_data.camera.T = s * (frame_data.camera.T - T @ frame_data.camera.R)
@@ -418,17 +401,10 @@ class UCO3DFrameDataBuilder:
             pcl = getattr(frame_data, pcl_field, None)
             if pcl is None:
                 continue
-            # points_before = torch.nn.functional.normalize(
-            #     pcl.xyz @ camera_before.R + camera_before.T
-            # )
+
             pcl_align = copy.copy(pcl)
             pcl_align.xyz = (pcl.xyz @ R + T) * s
             setattr(frame_data, pcl_field, pcl_align)
-            # points_after = torch.nn.functional.normalize(
-            #     pcl.xyz @ frame_data.camera.R + frame_data.camera.T
-            # )
-            # print((points_after - points_before).abs().max())
-            # assert torch.allclose(points_after, points_before, atol=1e-2)
 
         if (
             frame_data.sequence_gaussian_splats is not None
@@ -462,7 +438,8 @@ class UCO3DFrameDataBuilder:
                 else:
                     warnings.warn(
                         f"PointCloud file {path} at {path_local} does not exist."
-                        + " Returning an empty PointCloud object."
+                        " Returning an empty PointCloud object as allowed by"
+                        " load_empty_point_cloud_if_missing. Suppressing future warnings."
                     )
                 return PointCloud(
                     xyz=torch.empty((0, 3), dtype=torch.float32),
@@ -476,10 +453,10 @@ class UCO3DFrameDataBuilder:
         if self.use_cache:
             return copy.deepcopy(
                 self._point_cloud_cache[path]
-            )  # deepcopy to prevent cache overwrite
+            )  # deepcopy to prevent mutating the cached value
         return load_point_cloud(path_local)
 
-    # TODO: NOT USED SINCE WE LOAD FRAMES FROM VIDEOS -> consider removing
+    # TODO: NOT USED SINCE WE LOAD FRAMES FROM H5 -> consider removing
     def _load_mask_depth_from_file(
         self,
         frame_annotation: UCO3DFrameAnnotation,
@@ -501,7 +478,10 @@ class UCO3DFrameDataBuilder:
             mask_path = os.path.join(dataset_root, mask_path)
             depth_mask = load_depth_mask(self._local_path(mask_path))
         else:
-            depth_mask = (depth_map > 0.0).astype(np.float32)
+            depth_mask = (np.isfinite(depth_map) & (depth_map > 0.0)).astype(np.float32)
+
+        # remove infinite values
+        depth_map[~np.isfinite(depth_map)] = 0.0
 
         return torch.from_numpy(depth_map), path, torch.from_numpy(depth_mask)
 
@@ -532,9 +512,11 @@ class UCO3DFrameDataBuilder:
         if self.mask_depths:
             assert fg_mask is not None
             depth_map *= fg_mask
-        depth_mask = (depth_map > 0.0).float()
+        depth_mask = (np.isfinite(depth_map) & (depth_map > 0.0)).astype(np.float32)
+        # remove infinite values
+        depth_map[~np.isfinite(depth_map)] = 0.0
         logger.debug(f"Depth H5 read time {time.time()-time_0:.5f}.")
-        return depth_map, "", depth_mask
+        return torch.from_numpy(depth_map), "", torch.from_numpy(depth_mask)
 
     def _frame_from_video(
         self, video_path: str | None, timestamp_sec: float
@@ -577,7 +559,7 @@ class UCO3DFrameDataBuilder:
         if not ret:
             logger.warning(f"Failed to get frame from {video_path} at {timestamp_sec}.")
             return None
-        image = image[..., ::-1]
+        image = image[..., ::-1]  # BGR to RGB
         return transpose_normalize_image(image)
 
     def _load_fg_probability(

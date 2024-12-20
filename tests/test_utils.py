@@ -14,6 +14,7 @@ from uco3d.dataset_utils.frame_data import UCO3DFrameData
 
 
 class TestUtils(unittest.TestCase):
+    @unittest.skipIf(not torch.cuda.is_available(), "Tests moving to a CUDA device")
     def test_frame_data_to(
         self,
     ):

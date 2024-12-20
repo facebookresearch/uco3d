@@ -7,7 +7,6 @@
 
 import os
 
-import cv2
 import h5py
 import numpy as np
 import torch
@@ -33,10 +32,11 @@ def load_mask(path: str) -> np.ndarray:
 
 def load_depth(path: str, scale_adjustment: float) -> np.ndarray:
     if path.lower().endswith(".exr"):
-        # NOTE: environment variable OPENCV_IO_ENABLE_OPENEXR must be set to 1
-        # You will have to accept these vulnerabilities by using OpenEXR:
+        # NOTE: environment variable OPENCV_IO_ENABLE_OPENEXR must be set to 1 before
+        # importing cv2. You will have to accept these vulnerabilities by using OpenEXR:
         # https://github.com/opencv/opencv/issues/21326
         os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"
+        import cv2
         d = cv2.imread(path, cv2.IMREAD_ANYCOLOR | cv2.IMREAD_ANYDEPTH)
         d[d > 1e9] = 0.0
     elif path.lower().endswith(".png"):
@@ -66,10 +66,10 @@ def load_16bit_png_depth(depth_png: str) -> np.ndarray:
     return depth
 
 
-def load_h5_depth(path: str, frame_num: int):
+def load_h5_depth(path: str, frame_num: int) -> np.ndarray:
     with h5py.File(path, "r") as h5file:
-        depth_np = h5file[str(frame_num)][:].astype(np.float32)
-    depth_map = torch.from_numpy(depth_np)
+        depth_map = h5file[str(frame_num)][:].astype(np.float32)
+
     return depth_map
 
 

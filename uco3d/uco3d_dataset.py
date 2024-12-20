@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import time
+import urllib
 import warnings
 from collections import defaultdict
 
@@ -47,10 +48,10 @@ _SET_LISTS_TABLE: str = "set_lists"
 
 
 @dataclass
-class UCO3DDataset:  # pyre-ignore
+class UCO3DDataset:
     """
     A dataset with annotations stored as SQLite tables. This is an index-based dataset.
-    The length is returned after all sequence and frame filters are applied (see param
+    The length is returned after all sequence and frame filters are applied (see field
     definitions below). Indices can either be ordinal in [0, len), or pairs of
     (sequence_name, frame_number); with the performance of `dataset[i]` and
     `dataset[sequence_name, frame_number]` being same. A faster way to get metadata only
@@ -140,7 +141,7 @@ class UCO3DDataset:  # pyre-ignore
 
         if self.sqlite_metadata_file is None:
             # Attempt to set the sqlite_metadata_file from the dataset root.
-            # fFrst we need the dataset root, either take from the frame_data_builder
+            # First we need the dataset root, either take from the frame_data_builder
             # or from the environment variable.
             dataset_root = (
                 get_dataset_root() if self.dataset_root is None else self.dataset_root
@@ -152,9 +153,10 @@ class UCO3DDataset:  # pyre-ignore
                 )
             else:
                 raise ValueError(
-                    "sqlite_metadata_file must be set or the file"
+                    "Either sqlite_metadata_file must be set or the file"
                     " $UCO3D_DATASET_ROOT/metadata.sqlite must exist."
-                    " Either set sqlite_metadata_file or UCO3D_DATASET_ROOT."
+                    " Set sqlite_metadata_file or UCO3D_DATASET_ROOT,"
+                    " or pass dataset_root."
                 )
 
         if not os.path.exists(self.sqlite_metadata_file):
@@ -245,8 +247,9 @@ class UCO3DDataset:  # pyre-ignore
     @property
     def _sql_engine(self):
         if self._sql_engine_stored is None:
+            sanitised_path = urllib.parse.quote(self.sqlite_metadata_file)
             engine = sa.create_engine(
-                f"sqlite:///file:{self.sqlite_metadata_file}?mode=ro&uri=true"
+                f"sqlite:///file:{sanitised_path}?mode=ro&uri=true"
             )
             return engine
         else:
@@ -290,9 +293,6 @@ class UCO3DDataset:  # pyre-ignore
                 raise IndexError(
                     f"Sequence-frame index {frame_idx} not found; is it filtered out?"
                 )
-
-            if rest and rest[0] != self._index.loc[(seq, frame), "_image_path"]:
-                raise IndexError(f"Non-matching image path in {frame_idx}.")
         else:
             raise ValueError(f"Invalid frame index: {frame_idx}")
 
@@ -308,8 +308,6 @@ class UCO3DDataset:  # pyre-ignore
             entry = session.scalars(stmt).one()
             seq_metadata = session.scalars(seq_stmt).one()
         logger.debug(f"Time for db select operations is {time.time()-start_time:.5f}")
-        if (entry.image.path is not None) and ("_image_path" in self._index):
-            assert entry.image.path == self._index.loc[(seq, frame), "_image_path"]
 
         frame_data = self.frame_data_builder.build(
             entry, seq_metadata, load_blobs=load_blobs
@@ -418,6 +416,7 @@ class UCO3DDataset:  # pyre-ignore
     def frame_annotations_dataframe(self) -> pd.DataFrame:
         """
         Returns a DataFrame with all frame annotations.
+        It can use a lot of memory, so use sparingly.
         """
         stmt = sa.select(self.frame_annotations_type)
         with self._sql_engine.connect() as connection:
