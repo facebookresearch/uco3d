@@ -37,6 +37,7 @@ def load_depth(path: str, scale_adjustment: float) -> np.ndarray:
         # https://github.com/opencv/opencv/issues/21326
         os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"
         import cv2
+
         d = cv2.imread(path, cv2.IMREAD_ANYCOLOR | cv2.IMREAD_ANYDEPTH)
         d[d > 1e9] = 0.0
     elif path.lower().endswith(".png"):
