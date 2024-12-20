@@ -327,9 +327,7 @@ class UCO3DFrameDataBuilder:
                 else None
             )
             point_cloud = self._load_point_cloud(pcl_path)
-            setattr(
-                frame_data, f"sequence_{pcl_type_str}point_cloud_path", pcl_path
-            )
+            setattr(frame_data, f"sequence_{pcl_type_str}point_cloud_path", pcl_path)
             setattr(frame_data, f"sequence_{pcl_type_str}point_cloud", point_cloud)
             logger.debug(
                 f"{pcl_type_str}point_cloud load time {time.time()-pcl_start:.5f}"
