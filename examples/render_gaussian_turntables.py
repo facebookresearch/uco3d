@@ -95,7 +95,7 @@ def main():
 def _render_gaussians(
     frame_data,
     outfile: str,
-    n_frames: int = 23*4,
+    n_frames: int = 23 * 4,
     fps: int = 23,
     truncate_gaussians_outside_sphere_thr: float = 4.5,
 ):

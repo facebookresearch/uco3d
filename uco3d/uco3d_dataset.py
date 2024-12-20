@@ -137,15 +137,13 @@ class UCO3DDataset:  # pyre-ignore
     def __post_init__(self) -> None:
         if sa.__version__ < "2.0":
             raise ImportError("This class requires SQL Alchemy 2.0 or later")
-        
+
         if self.sqlite_metadata_file is None:
             # Attempt to set the sqlite_metadata_file from the dataset root.
             # fFrst we need the dataset root, either take from the frame_data_builder
             # or from the environment variable.
             dataset_root = (
-                get_dataset_root()
-                if self.dataset_root is None
-                else self.dataset_root
+                get_dataset_root() if self.dataset_root is None else self.dataset_root
             )
             # Then we point to the default "metadata.sqlite" file in dataset_root.
             if dataset_root is not None and os.path.exists(dataset_root):
@@ -158,7 +156,7 @@ class UCO3DDataset:  # pyre-ignore
                     " $UCO3D_DATASET_ROOT/metadata.sqlite must exist."
                     " Either set sqlite_metadata_file or UCO3D_DATASET_ROOT."
                 )
-            
+
         if not os.path.exists(self.sqlite_metadata_file):
             raise FileNotFoundError(
                 f"sqlite_metadata_file {self.sqlite_metadata_file} not found"
@@ -276,11 +274,11 @@ class UCO3DDataset:  # pyre-ignore
             raise ValueError(
                 "self.frame_data_builder must be set to enable data fetching."
             )
-            
+
         if isinstance(frame_idx, int):
             if frame_idx >= len(self._index):
                 raise IndexError(f"index {frame_idx} out of range {len(self._index)}")
-            
+
             seq, frame = self._index.index[frame_idx]
         elif isinstance(frame_idx, (tuple, list)):
             seq, frame, *rest = frame_idx

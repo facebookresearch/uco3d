@@ -19,7 +19,7 @@ The dataset is described in our paper ["UnCommon Objects in 3D"](TODO).
 ## Main features
 - **170,000 videos** scanning diverse objects from all directions.
 - Objects come from the LVIS taxonomy of **~1000 categories**, grouped into 50 super-categories.
-- Differently from CO3Dv2, *uCO3D releases full original videos* instead of frames
+- Unlike CO3Dv2, **uCO3D releases full original videos** instead of frames.
 - Each video is annotated with object segmentation, camera poses, and **3 types of point clouds**.
 - The dataset newly contains a **3D Gaussian Splat reconstruction for each video**.
 - Each scene contains a long and short caption obtained with a large video-language model.
@@ -59,34 +59,33 @@ Execute `python dataset_download/download_dataset.py -h` for the list of all dow
 
 #### Dataset size per modality
 
-TODO: refine this
+The following table contains the size of all videos for a given modality:
 
 ```
-Results:
---------------------------------------------------
-Category                            Size (GB)       File Count
---------------------------------------------------
-part_depth_maps_                    9,685.37 GB        1380
-part_gaussian_splats_               1,176.10 GB        1379
-part_mask_videos_                   160.43 GB        1388
-part_point_clouds_                  571.09 GB        1378
-part_rgb_videos_                    7,582.21 GB        1388
-part_segmented_point_clouds_        43.92 GB        1377
-part_sparse_point_clouds_           41.07 GB        1388
---------------------------------------------------
-Total                               19,260.20 GB        9678
+-------------------------------------------
+Modality                      Size (GB)     
+-------------------------------------------
+depth_maps                    
+gaussian_splats               
+mask_videos                   
+point_clouds                  
+rgb_videos                    
+segmented_point_clouds        
+sparse_point_clouds           
+-------------------------------------------
+Total                         
 ```
 
-### Downloading specific categories or super-categories
+### Downloading specific super-categories
 
-Setting `--download_super_categories` and `--download_categories` will instruct the script to download only a subset of the available categories.
+Setting `--download_super_categories` will instruct the script to download only a subset of the available categories.
 For instance
 ```bash
-python dataset_download/download_dataset.py --download_folder <DESTINATION_FOLDER> --download_super_categories "vegetables_and_legumes,stationery" --download_categories "kettle"
+python dataset_download/download_dataset.py --download_folder <DESTINATION_FOLDER> --download_super_categories "vegetables_and_legumes,stationery"
 ```
-will download only the vegetables&legumes and stationery super-categories, together with the kettle category. Note that if a super-category is selected for download, it will download all of its categories regardless of the `--download_categories` content.
+will download only the vegetables&legumes and stationery super-categories.
 
-Note that `--download_modalities` can be mixed with `--download_categories` and  `--download_super_categories` to enable choosing any possible subset of the dataset.
+Note that `--download_modalities` can be mixed with `--download_super_categories` to enable choosing any possible subset of the dataset.
 
 Run `python dataset_download/download_dataset.py -h` for the full list of options.
 
@@ -312,13 +311,46 @@ The folder `<UCO3D_DATASET_ROOT>/set_lists/` provides the following subset lists
 - **set_lists_static-categories-accurate-reconstruction.sqlite** - Contains the videos of all rigid categories of uCO3D with high-quality reconstructions.
 - **set_lists_dynamic-categories.sqlite** - Contains the videos of all flexible categories (e.g. animals) of uCO3D.
 
+### Creating custom subset lists
+
+Subset lists are stored as `sqlite` tables. The easiest way is to use `pandas` to select a subset of the main `<UCO3D_DATASET_ROOT>/metadata.sqlite` table. The following example makes a subset list from or 100 and 30 training and validation samples respectively, by taking the first 130 sequences:
+```python
+import pandas as pd, sqlite3, os
+
+# read the main metadata table (takes long time)
+metadata_file = os.path.join(UCO3D_DATASET_ROOT, "metadata.sqlite")
+frame_annots = pd.read_sql_table("frame_annots", f"sqlite:///{metadata_file}")
+
+# pick dataset sequence names by taking unique sequence names from frame annotations
+seqs = frame_annots["sequence_name"].unique()
+
+# choose the list of sequences
+train_seqs, val_seqs = downloaded_seqs[:100], downloaded_seqs[100:130]
+
+# training setlist
+setlists_train = frame_annots[frame_annots.isin(train_seqs)][["frame_number","sequence_name"]]
+setlists_train["subset"] = "train"
+# validation setlist
+setlists_val = frame_annots[frame_annots.isin(val_seqs)][["frame_number","sequence_name"]]
+setlists_val["subset"] = "val"
+
+# the new setlists will be stored as the set_lists_130.sqlite file in the original root
+setlist_file = os.path.join(UCO3D_DATASET_ROOT, "set_lists", "set_lists_130.sqlite")
+# store the new table
+with sqlite3.connect(setlist_file) as con:
+    setlists = pd.concat([setlists_train, setlists_val])
+    setlists.to_sql("set_lists", con, if_exists='replace', index=False)
+```
+
 # License
 
 The data are released under the [CC BY 4.0 license](LICENSE).
 
 # Third-Party Code
 
-This project uses code from other sources, which are licensed under their respective licenses.
+This project uses code from other sources, which are licensed under their respective licenses:
+- [gsplat](https://github.com/nerfstudio-project/gsplat)
+- [gsplat-convert](https://github.com/Ending2015a/gsplat-convert)
 
 # Reference
 If you use our dataset, please use the following citation:

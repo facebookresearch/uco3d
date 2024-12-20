@@ -70,7 +70,7 @@ def download_dataset(
             "Please specify `link_list_file` with a valid path to a json"
             " with zip file download links."
         )
-        
+
     if not os.path.isfile(category_to_archives_file):
         raise ValueError(
             "Please specify `category_to_archives_file` with a valid path to a json"
@@ -115,7 +115,10 @@ def download_dataset(
                         + f"Possible choices are: {str(possible)}."
                     )
 
-    def _is_for_download(modality: str, super_category: str,) -> bool:
+    def _is_for_download(
+        modality: str,
+        super_category: str,
+    ) -> bool:
         if download_modalities is not None and modality not in download_modalities:
             return False
         if download_super_categories is None:
@@ -127,7 +130,9 @@ def download_dataset(
     def _add_to_data_links(data_links, link_data):
         # copy the link data and replace the filename with the actual link
         link_data_with_link = copy.deepcopy(link_data)
-        link_data_with_link["download_url"] = links[link_data["filename"]]["download_url"]
+        link_data_with_link["download_url"] = links[link_data["filename"]][
+            "download_url"
+        ]
         data_links.append(link_data_with_link)
 
     # determine links to files we want to download
@@ -143,7 +148,9 @@ def download_dataset(
                     _add_to_data_links(data_links, link_data)
 
     # multiprocessing pool
-    with _get_pool_fn(n_download_workers)(processes=n_download_workers) as download_pool:
+    with _get_pool_fn(n_download_workers)(
+        processes=n_download_workers
+    ) as download_pool:
         print(f"Downloading {len(data_links)} dataset files ...")
         download_ok = {}
         for link_name, ok in tqdm(
@@ -188,10 +195,10 @@ def download_dataset(
 
     # clean up the in-progress folder if empty
     in_progress_folder = _get_in_progress_folder(download_folder)
-    if os.path.isdir(in_progress_folder) and len(os.listdir(in_progress_folder))==0:
+    if os.path.isdir(in_progress_folder) and len(os.listdir(in_progress_folder)) == 0:
         print(f"Removing in-progress downloads folder {in_progress_folder}")
         shutil.rmtree(in_progress_folder)
-    
+
     print("Done")
 
 
@@ -204,7 +211,6 @@ def _sha256_file(path: str):
             file_buffer = f.read(BLOCKSIZE)
     digest_ = sha256_hash.hexdigest()
     return digest_
-
 
 
 def _get_in_progress_folder(download_folder: str):
@@ -256,7 +262,7 @@ def _download_file(
     if checksum_check:
         print(f"Checking SHA256 for {local_fl}.")
         try:
-            assert _sha256_file(local_fl)==sha256
+            assert _sha256_file(local_fl) == sha256
         except AssertionError:
             warnings.warn(
                 f"Checksums for {local_fl} did not match!"

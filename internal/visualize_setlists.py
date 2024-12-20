@@ -31,13 +31,10 @@ def _visualize_setlists(
     set_lists_dir,
     set_list_name,
 ):
-    set_list_path = os.path.join(
-        set_lists_dir,
-        set_list_name + ".sqlite"
-    )
+    set_list_path = os.path.join(set_lists_dir, set_list_name + ".sqlite")
     print(f"loading table {set_list_path}")
     table = pd.read_sql_table("set_lists", f"sqlite:///{set_list_path}")
-    table_val = table[table["subset"]=="val"]
+    table_val = table[table["subset"] == "val"]
     val_seqs = table_val["sequence_name"].unique().tolist()
     print("visualizing")
     set_image = _make_set_image_grid(canonical_render_dir, val_seqs)
@@ -49,10 +46,12 @@ def _visualize_setlists(
         outfile,
         nrow=int(math.ceil(math.sqrt(set_image.shape[0]))),
     )
-    
+
 
 outdir = "/fsx-repligen/dnovotny/visuals/uco3d_setlists/"
-canonical_render_dir = "/fsx-repligen/dnovotny/datasets/uCO3D/canonical_renders/v1_segmented=False"
+canonical_render_dir = (
+    "/fsx-repligen/dnovotny/datasets/uCO3D/canonical_renders/v1_segmented=False"
+)
 set_lists_dir = "/fsx-repligen/shared/datasets/uCO3D/dataset_export/set_lists/"
 set_list_names = [
     "set_lists_3categories-debug",

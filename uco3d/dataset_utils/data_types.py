@@ -350,7 +350,7 @@ class GaussianSplats:
     quats: torch.Tensor
     shN: Optional[torch.Tensor] = None
     fg_mask: Optional[torch.Tensor] = None
-    
+
     def __len__(self):
         return self.means.shape[0]
 

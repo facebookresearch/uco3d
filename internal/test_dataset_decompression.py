@@ -20,7 +20,7 @@ sys.path.insert(0, TEST_DIR)
 
 
 @contextlib.contextmanager
-#temporarily change to a different working directory
+# temporarily change to a different working directory
 def temporary_working_directory(path):
     _oldCWD = os.getcwd()
     os.chdir(os.path.abspath(path))
@@ -39,7 +39,7 @@ def _make_temporary_setlists(download_folder):
     random.shuffle(downloaded_seqs)
     train_seqs = downloaded_seqs[:10]
     val_seqs = downloaded_seqs[10:13]
-    
+
     target_setlist_file = os.path.join(
         download_folder,
         "set_lists",
@@ -50,12 +50,12 @@ def _make_temporary_setlists(download_folder):
     con = sqlite3.connect(target_setlist_file)
     setlists = pd.DataFrame()
     for set_ in ["train", "val"]:
-        set_seqs = train_seqs if set_=="train" else val_seqs
-        setlists_now = frame_annots[["frame_number","sequence_name"]]
+        set_seqs = train_seqs if set_ == "train" else val_seqs
+        setlists_now = frame_annots[["frame_number", "sequence_name"]]
         setlists_now = setlists_now[setlists_now["sequence_name"].isin(set_seqs)]
         setlists_now["subset"] = set_
         setlists = pd.concat([setlists, setlists_now])
-    setlists.to_sql("set_lists", con, if_exists='replace', index=False)
+    setlists.to_sql("set_lists", con, if_exists="replace", index=False)
     con.close()
 
 
@@ -64,7 +64,7 @@ def _get_downloaded_seqs(download_folder):
     downloaded_seqs = []
     for root, dirs, files in os.walk(download_folder):
         # Calculate the depth by counting the number of path separators
-        depth = root.replace(download_folder, '').count(os.sep)
+        depth = root.replace(download_folder, "").count(os.sep)
         if depth == 2:
             downloaded_seqs.append(os.path.basename(root))
     downloaded_seqs = set(downloaded_seqs)
@@ -78,32 +78,32 @@ def _restrict_metadata_to_downloaded_files(big_metadata_file, download_folder):
         annots = pd.read_sql_table(tab_name, f"sqlite:///{big_metadata_file}")
         print(f"filtering {tab_name}")
         annots = annots[annots["sequence_name"].isin(downloaded_seqs)]
-        if tab_name=="sequence_annots":
+        if tab_name == "sequence_annots":
             sequence_annots = annots
             assert len(annots) <= len(downloaded_seqs)
-        elif tab_name=="frame_annots":
+        elif tab_name == "frame_annots":
             frame_annots = annots
         else:
             raise ValueError(f"unknown table name {tab_name}")
-    
+
     # Connect to the SQLite database (it will be created if it doesn't exist)
-    with tempfile.TemporaryDirectory() as temp_dir:    
+    with tempfile.TemporaryDirectory() as temp_dir:
         target_db_file = os.path.join(temp_dir, "temp_metadata.sqlite")
         print(f"writing {target_db_file}")
         # assert not os.path.isfile(target_db_file)
         con = sqlite3.connect(target_db_file)
         # Write the dataframes to the database
-        sequence_annots.to_sql('sequence_annots', con, if_exists='replace', index=False)
-        frame_annots.to_sql('frame_annots', con, if_exists='replace', index=False)
+        sequence_annots.to_sql("sequence_annots", con, if_exists="replace", index=False)
+        frame_annots.to_sql("frame_annots", con, if_exists="replace", index=False)
         # Close the connection
         con.close()
-        target_db_file_final = os.path.join(download_folder, "metadata.sqlite")    
+        target_db_file_final = os.path.join(download_folder, "metadata.sqlite")
         shutil.move(target_db_file, target_db_file_final)
 
 
 def _test_iterate_dataset(
     download_folder,
-    download_modalities = None,
+    download_modalities=None,
 ):
     modality_to_load_switch = {
         "rgb_videos": "load_images",
@@ -120,10 +120,12 @@ def _test_iterate_dataset(
             "dataset_root": download_folder,
             **{
                 load_switch: (
-                    True if download_modalities is None
+                    True
+                    if download_modalities is None
                     else modality in download_modalities
-                ) for modality, load_switch in modality_to_load_switch.items()
-            }
+                )
+                for modality, load_switch in modality_to_load_switch.items()
+            },
         },
     )
     load_idx = [random.randint(0, len(dataset)) for i in range(20)]
@@ -137,27 +139,25 @@ def _run_one_download(
     download_folder,
     link_list_file,
     category_to_archives_file,
-    download_super_categories = None,
-    download_modalities = None,
+    download_super_categories=None,
+    download_modalities=None,
     n_download_workers: int = 8,
     n_extract_workers: int = 8,
     big_metadata_file: str = None,
 ):
-    
+
     # adjust the mapping file so it contains full paths to the archives
     with open(link_list_file, "r") as f:
         links = json.load(f)
-        
+
     links_full_path = copy.deepcopy(links)
     for file_name, link_data in links["main_data"].items():
         links_full_path["main_data"][file_name]["download_url"] = os.path.join(
             zipfiles_folder,
             link_data["filename"],
         )
-        assert os.path.isfile(
-            links_full_path["main_data"][file_name]["download_url"]
-        )
-    
+        assert os.path.isfile(links_full_path["main_data"][file_name]["download_url"])
+
     if True:
         with tempfile.TemporaryDirectory() as temp_dir:
 
@@ -182,11 +182,11 @@ def _run_one_download(
                 "--n_extract_workers",
                 str(int(n_extract_workers)),
             ]
-            
+
             def _add_to_cmd_if_not_none(arg_name, arg_value):
                 if arg_value is not None:
                     cmd.extend([f"--{arg_name}", ",".join(arg_value)])
-            
+
             _add_to_cmd_if_not_none(
                 "download_super_categories",
                 download_super_categories,
@@ -195,26 +195,26 @@ def _run_one_download(
                 "download_modalities",
                 download_modalities,
             )
-            
+
             print(" ".join(cmd))
-            
+
             os.makedirs(download_folder, exist_ok=True)
-            
+
             with temporary_working_directory(DATASET_DOWNLOAD_DIR):
-                # Code executed within this block will have the new directory 
+                # Code executed within this block will have the new directory
                 # as the current working directory
                 print("Current directory:", os.getcwd())
                 subprocess.check_call(cmd)
- 
+
     _restrict_metadata_to_downloaded_files(big_metadata_file, download_folder)
- 
+
     _make_temporary_setlists(download_folder)
- 
+
     _test_iterate_dataset(
         download_folder,
-        download_modalities = download_modalities,
+        download_modalities=download_modalities,
     )
-    
+
     if download_modalities is None:
         # run the testing suite
         with temporary_working_directory(TEST_DIR):
@@ -224,9 +224,9 @@ def _run_one_download(
             env = os.environ.copy()
             env["UCO3D_DATASET_ROOT"] = download_folder
             subprocess.check_call(cmd, env=env)
- 
- 
- # download everything
+
+
+# download everything
 # _run_one_download(
 #     zipfiles_folder = "/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/compressed/",
 #     download_folder = "/fsx-repligen/dnovotny/datasets/uCO3D/extract_test/v2/",
@@ -240,12 +240,12 @@ def _run_one_download(
 
 # download some modalities
 _run_one_download(
-    zipfiles_folder = "/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/compressed/",
-    download_folder = "/fsx-repligen/dnovotny/datasets/uCO3D/extract_test/v2_modalities/",
-    link_list_file = "/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/download.json",
-    category_to_archives_file = "/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/file_mapping.json",
-    download_super_categories = None,
-    download_modalities = ["rgb_videos", "sparse_point_clouds", "point_clouds"],
+    zipfiles_folder="/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/compressed/",
+    download_folder="/fsx-repligen/dnovotny/datasets/uCO3D/extract_test/v2_modalities/",
+    link_list_file="/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/download.json",
+    category_to_archives_file="/fsx-repligen/shared/datasets/uCO3D/dataset_export_zip/file_mapping.json",
+    download_super_categories=None,
+    download_modalities=["rgb_videos", "sparse_point_clouds", "point_clouds"],
     # big_metadata_file="/fsx-repligen/shared/datasets/uCO3D/dataset_export/metadata.sqlite",
     big_metadata_file="/fsx-repligen/dnovotny/datasets/uCO3D/extract_test/v2_modalities/metadata.sqlite",
 )

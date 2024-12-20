@@ -337,7 +337,7 @@ class UCO3DFrameDataBuilder:
                 )
                 assert pcl_annot is not None
                 pcl_path = (
-                    os.path.join(self.dataset_root, pcl_annot.path) 
+                    os.path.join(self.dataset_root, pcl_annot.path)
                     if pcl_annot.path is not None
                     else None
                 )
@@ -383,9 +383,7 @@ class UCO3DFrameDataBuilder:
                     else:
                         sequence_gaussians = truncate_bg_gaussians(sequence_gaussians)
                 frame_data.sequence_gaussian_splats = sequence_gaussians
-            logger.debug(
-                f"Gauss splats load time {time.time()-gauss_start:.5f}"
-            )
+            logger.debug(f"Gauss splats load time {time.time()-gauss_start:.5f}")
 
         if self.box_crop:
             frame_data.crop_by_metadata_bbox_(self.box_crop_context)
@@ -527,9 +525,9 @@ class UCO3DFrameDataBuilder:
         #     "".join(filter(str.isdigit, os.path.split(frame_annotation.image.path)[-1]))
         # )
         # assert h5_frame_num == (frame_annotation.frame_number + 1)
-        
+
         h5_frame_num = frame_annotation.frame_number + 1
-        
+
         depth_map = load_h5_depth(depth_h5_path_local, h5_frame_num)[None]
         if self.mask_depths:
             assert fg_mask is not None
@@ -573,7 +571,9 @@ class UCO3DFrameDataBuilder:
         time_3 = time.time()
         logger.debug(f"Video {video_path} Time for capture set is {time_3-time_2:.5f}.")
         ret, image = capture.read()
-        logger.debug(f"Video {video_path} Time for reading is {time.time()-time_3:.5f}.")
+        logger.debug(
+            f"Video {video_path} Time for reading is {time.time()-time_3:.5f}."
+        )
         if not ret:
             logger.warning(f"Failed to get frame from {video_path} at {timestamp_sec}.")
             return None

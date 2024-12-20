@@ -6,10 +6,10 @@ from tqdm import tqdm
 metadata_path = "/fsx-repligen/shared/datasets/uCO3D/dataset_export_tool/temp_database_1214/metadata_1734152765.9553552.sqlite"
 table = pd.read_sql_table("frame_annots", f"sqlite:///{metadata_path}")
 
+
 def _path_to_frame_number(path):
-    return int(
-        "".join(filter(str.isdigit, os.path.split(path)[-1]))
-    )
+    return int("".join(filter(str.isdigit, os.path.split(path)[-1])))
+
 
 image_paths = table["_image_path"]
 depth_paths = table["_depth_path"]

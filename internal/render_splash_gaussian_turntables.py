@@ -27,7 +27,9 @@ from uco3d import (
 
 
 def main():
-    output_root = "/fsx-repligen/dnovotny/visuals/uco3d_gauss_turntables_thr3p5_clipscore_uptgt"
+    output_root = (
+        "/fsx-repligen/dnovotny/visuals/uco3d_gauss_turntables_thr3p5_clipscore_uptgt"
+    )
     num_scenes = 1000
     debug = False
     # truncate_gaussians_outside_sphere_thr = 3.5
@@ -38,7 +40,7 @@ def main():
     outroot = output_root
     if debug:
         outroot = outroot + "debug"
-    
+
     os.makedirs(outroot, exist_ok=True)
 
     # obtain the dataset
@@ -59,32 +61,29 @@ def main():
         ),
         set_lists_file_name=(
             "set_lists_3categories-debug.sqlite"
-            if debug else
-            "set_lists_static-categories-accurate-reconstruction.sqlite"
-        )
+            if debug
+            else "set_lists_static-categories-accurate-reconstruction.sqlite"
+        ),
     )
-    
+
     if debug:
         seq_annots = dataset.sequence_annotations()
-        sequences_show = [
-            sa.sequence_name for sa in seq_annots
-        ]
+        sequences_show = [sa.sequence_name for sa in seq_annots]
         sequence_name_to_score = {}
-        
+
     else:
-        
+
         # sort the sequences based on the reconstruction quality score
         scene_to_score = "/fsx-repligen/dnovotny/datasets/uCO3D/canonical_renders/v1_segmented=False/scene_to_score.json"
         with open(scene_to_score, "r") as f:
             scene_to_score = json.load(f)
-        
+
         seq_annots = dataset.sequence_annotations()
         # sequence_name_to_score = {
         #     sa.sequence_name: sa.reconstruction_quality.gaussian_splats
         # }
         sequence_name_to_score = {
-            sa.sequence_name: scene_to_score[sa.sequence_name]
-            for sa in seq_annots
+            sa.sequence_name: scene_to_score[sa.sequence_name] for sa in seq_annots
         }
         sequence_name_to_score = dict(
             sorted(
@@ -93,11 +92,11 @@ def main():
                 reverse=True,
             )
         )
-        
+
         supercat_to_sequence = defaultdict(list)
         for sa in seq_annots:
             supercat_to_sequence[sa.super_category].append(sa.sequence_name)
-        
+
         sequences_show = []
         n_per_supercat = int(math.ceil(num_scenes / len(supercat_to_sequence)))
         for super_category, super_category_seqs in supercat_to_sequence.items():
@@ -112,11 +111,13 @@ def main():
                     reverse=True,
                 )
             )
-            sequences_show.extend(list(sc_sequence_name_to_score.keys())[:n_per_supercat])
-        
+            sequences_show.extend(
+                list(sc_sequence_name_to_score.keys())[:n_per_supercat]
+            )
+
     print(len(sequences_show))
     random.shuffle(sequences_show)
-    
+
     # iterate over sequences and render a 360 video of each
     for seqi, seq_name in enumerate(tqdm(sequences_show)):
         if seqi >= int(num_scenes):
@@ -141,7 +142,7 @@ def main():
 def _render_gaussians(
     frame_data,
     outfile: str,
-    n_frames: int = 23*4,
+    n_frames: int = 23 * 4,
     fps: int = 23,
     truncate_gaussians_outside_sphere_thr: float = 3.5,
 ):

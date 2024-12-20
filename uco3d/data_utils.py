@@ -79,14 +79,14 @@ def get_all_load_dataset(
     dataset_root = frame_data_builder_kwargs.get("dataset_root", None)
     if dataset_root is None:
         dataset_root = get_dataset_root(assert_exists=True)
-    
+
     # specify the subset lists file
     subset_lists_file = os.path.join(
         dataset_root,
         "set_lists",
         set_lists_file_name,
     )
-    
+
     # instantiate the frame data builder and the dataset
     frame_data_builder = UCO3DFrameDataBuilder(**frame_data_builder_kwargs)
     dataset_kwargs = {

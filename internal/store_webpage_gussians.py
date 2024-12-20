@@ -71,14 +71,13 @@ dataset = get_all_load_dataset(
             "set_lists_static-categories-accurate-reconstruction.sqlite",
         ),
         subsets=["val"],
-    )  # this will load the whole dataset without any setlists
+    ),  # this will load the whole dataset without any setlists
 )
 
 
 seq_annots = dataset.sequence_annotations()
 sequence_name_to_score = {
-    sa.sequence_name: sa.reconstruction_quality.gaussian_splats
-    for sa in seq_annots
+    sa.sequence_name: sa.reconstruction_quality.gaussian_splats for sa in seq_annots
 }
 sequence_name_to_score = dict(
     sorted(
@@ -133,11 +132,10 @@ for seq_name in tqdm(seq_names):
         outdir,
         f"{entry.sequence_name}.ply",
     )
-    
-    
+
     if entry.sequence_gaussian_splats.means.shape[0] <= 0:
         continue
-    
+
     # truncate points outside a given spherical boundary:
     if entry.sequence_gaussian_splats.fg_mask is None:
         fg_mask = torch.ones(entry.sequence_gaussian_splats.means.shape[0], dtype=bool)

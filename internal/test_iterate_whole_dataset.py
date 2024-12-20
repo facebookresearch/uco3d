@@ -34,14 +34,14 @@ def iterate_dataset_worker(
     specific_dataset_idx: List[int] = None,
     fast_check: bool = False,
 ):
-    
+
     if fast_check:
         print("running fast check")
-    
+
     if specific_dataset_idx is not None:
         assert world_size <= 1
-        assert rank==0
-    
+        assert rank == 0
+
     print("loading dataset ...")
     dataset = get_all_load_dataset(
         frame_data_builder_kwargs=dict(
@@ -65,33 +65,36 @@ def iterate_dataset_worker(
             # ),
             # subsets=["train", "val"],
             # subset_lists_file=None,
-        )  # this will load the whole dataset without any setlists
+        ),  # this will load the whole dataset without any setlists
     )
     print("done loading dataset.")
-    assert not dataset.is_filtered(), "Dataset is filtered, this script is for full dataset only"
+    assert (
+        not dataset.is_filtered()
+    ), "Dataset is filtered, this script is for full dataset only"
     all_idx = torch.arange(len(dataset))
     idx_chunk = torch.chunk(all_idx, world_size)
     idx_this_worker = idx_chunk[rank]
-    
+
     if True:
         # dataset = torch.utils.data.Subset(dataset, idx_this_worker)
         if specific_dataset_idx is not None:
             batch_sampler = [specific_dataset_idx]
         else:
             batch_sampler = [
-                b.tolist() for b in torch.split(
+                b.tolist()
+                for b in torch.split(
                     idx_this_worker,
                     num_frames_per_batch,
                 )
             ]
-            
+
         # resume from checkpoint if needed
         batch_idx_start = _load_worker_checkpoint(log_dir, rank)
         if batch_idx_start is None:
-            batch_idx_start = 0    
+            batch_idx_start = 0
         batch_nums = list(range(len(batch_sampler)))[batch_idx_start:]
         batch_sampler = batch_sampler[batch_idx_start:]
-        
+
         dataloader = torch.utils.data.DataLoader(
             dataset,
             num_workers=num_workers,
@@ -100,7 +103,7 @@ def iterate_dataset_worker(
             batch_sampler=batch_sampler,
             prefetch_factor=4 if num_workers > 0 else None,
         )
-        
+
         assert len(batch_nums) == len(batch_sampler)
         dataloader_iter = iter(dataloader)
         for iter_idx, batch_idx in tqdm(
@@ -118,7 +121,7 @@ def iterate_dataset_worker(
                 print(traceback.format_exc())
                 with open(exc_file, "w") as f:
                     f.write(traceback.format_exc())
-                
+
                 # get sequence names and paths to the problematic scenes
                 try:
                     batch_meta = [
@@ -129,7 +132,8 @@ def iterate_dataset_worker(
                             bm.sequence_super_category,
                             bm.sequence_category,
                             bm.sequence_name,
-                        ) for bm in batch_meta
+                        )
+                        for bm in batch_meta
                     ]
                 except Exception as e:
                     print(f"Failed to get batch_sequences for batch {batch_idx}")
@@ -137,11 +141,14 @@ def iterate_dataset_worker(
                     batch_sequences = None
                 batch_file = os.path.join(log_dir, f"{batch_indices[0]}_batch.json")
                 with open(batch_file, "w") as f:
-                    json.dump({
-                        "batch_indices": batch_indices,
-                        "batch_sequence_names": batch_sequences,
-                    }, f)
-                    
+                    json.dump(
+                        {
+                            "batch_indices": batch_indices,
+                            "batch_sequence_names": batch_sequences,
+                        },
+                        f,
+                    )
+
             if iter_idx % 100 == 0 and iter_idx > 0:
                 _store_worker_checkpoint(log_dir, rank, batch_idx)
     else:
@@ -161,46 +168,49 @@ def _analyze_logs(log_dir):
     exc_files = sorted(glob.glob(os.path.join(log_dir, "*_exc.txt")))
     bad_gauss_splats = []
     missing_segmented_pcls = []
-    
+
     seq_to_exc = {}
     seq_to_idx = {}
-    
+
     # step = False
-    
+
     for exc_file in tqdm(exc_files):
         with open(exc_file, "r") as f:
             exc_string = f.read()
         batch_file = exc_file.replace("_exc.txt", "_batch.json")
         with open(batch_file, "r") as f:
             batch_info = json.load(f)
-        
+
         # for bidx, seq_name in zip(batch_info["batch_indices"], batch_info["batch_sequence_names"]):
         # if "1-91152-9143" in seq_name[-1]:
         #     step = True
         # if step:
         #     import pdb; pdb.set_trace()
-        
+
         n_seqs_in_batch = len(set(tuple(s) for s in batch_info["batch_sequence_names"]))
         assert n_seqs_in_batch <= 2
-        
-        bix, seq_name = batch_info["batch_indices"][0], batch_info["batch_sequence_names"][0]
-        if n_seqs_in_batch==1:
+
+        bix, seq_name = (
+            batch_info["batch_indices"][0],
+            batch_info["batch_sequence_names"][0],
+        )
+        if n_seqs_in_batch == 1:
             if tuple(seq_name) not in seq_to_exc:
                 seq_to_exc[tuple(seq_name)] = exc_string
                 seq_to_idx[tuple(seq_name)] = batch_info["batch_indices"]
-    
+
         # exc_lines = exc_string.split()
-        
+
         # if exc_lines[-1].endswith("/gaussian_splats/meta.json'"):
         #     start = exc_lines[-1].rfind("/fsx-repligen/shared/")
         #     splats_folder = exc_lines[-1][start:-1]
         #     bad_gauss_splats.append(splats_folder)
         #     continue
-          
+
         # if exc_lines[-4].endswith("segmented_point_cloud.ply"):
         #     missing_segmented_pcls.append(exc_lines[-4])
         #     continue
-          
+
         # # print("\n\n\n\n----------\n\n\n\n")
         # print(exc_string)
         # print(batch_indices)
@@ -212,21 +222,57 @@ def _analyze_logs(log_dir):
         # print("\n\n\n\n----------\n\n\n\n")
         any_match = False
         for err_description, pat in (
-            ("dataloader fail", r"RuntimeError: DataLoader worker (.*) exited unexpectedly"),
-            ("bad depth_maps file (depth map has wrong shape)", r"self\.depth_map = crop_around_box(.*)squashed image"),
-            ("bad depth_maps file (KeyError)", r"h5py\.h5o\.open(.*)KeyError: \"Unable to open object"),
-            ("bad depth_maps file (KeyError)", r"h5py\.h5o\.open(.*)KeyError: \"Unable to synchronously open object"),
-            ("missing segmented_point_cloud.py", r"FileNotFoundError: PointCloud file /fsx-repligen/shared/datasets/uCO3D/dataset_export/(.*)/segmented_point_cloud.ply (.*) does not exist."),
-            ("missing gaussian splats meta.json", r"FileNotFoundError: \[Errno 2\] No such file or directory: \'/fsx-repligen/shared/datasets/uCO3D/dataset_export/(.*)/gaussian_splats/meta.json\'"),
-            ("bad CRC-32 for centroids.npy", r"zipfile.BadZipFile: Bad CRC-32 for file \'centroids.npy\'"),
+            (
+                "dataloader fail",
+                r"RuntimeError: DataLoader worker (.*) exited unexpectedly",
+            ),
+            (
+                "bad depth_maps file (depth map has wrong shape)",
+                r"self\.depth_map = crop_around_box(.*)squashed image",
+            ),
+            (
+                "bad depth_maps file (KeyError)",
+                r"h5py\.h5o\.open(.*)KeyError: \"Unable to open object",
+            ),
+            (
+                "bad depth_maps file (KeyError)",
+                r"h5py\.h5o\.open(.*)KeyError: \"Unable to synchronously open object",
+            ),
+            (
+                "missing segmented_point_cloud.py",
+                r"FileNotFoundError: PointCloud file /fsx-repligen/shared/datasets/uCO3D/dataset_export/(.*)/segmented_point_cloud.ply (.*) does not exist.",
+            ),
+            (
+                "missing gaussian splats meta.json",
+                r"FileNotFoundError: \[Errno 2\] No such file or directory: \'/fsx-repligen/shared/datasets/uCO3D/dataset_export/(.*)/gaussian_splats/meta.json\'",
+            ),
+            (
+                "bad CRC-32 for centroids.npy",
+                r"zipfile.BadZipFile: Bad CRC-32 for file \'centroids.npy\'",
+            ),
             ("cannot load RGB image from video", r"assert image_np is not None"),
-            ("missing depth_mps.h5", r"FileNotFoundError: Depth video /fsx-repligen/shared/datasets/uCO3D/dataset_export/(.*)/depth_maps.h5 does not exist."),
-            ("bad shape in gaussian splats meta.json", r"load_compressed_gaussians(.*)RuntimeError: shape(.*)is invalid for input of size(.*)"),
-            ("missing mask_video.mkv", r"FileNotFoundError: Video /fsx-repligen/shared/datasets/uCO3D/dataset_export/(.*)/mask_video.mkv does not exist."),
+            (
+                "missing depth_mps.h5",
+                r"FileNotFoundError: Depth video /fsx-repligen/shared/datasets/uCO3D/dataset_export/(.*)/depth_maps.h5 does not exist.",
+            ),
+            (
+                "bad shape in gaussian splats meta.json",
+                r"load_compressed_gaussians(.*)RuntimeError: shape(.*)is invalid for input of size(.*)",
+            ),
+            (
+                "missing mask_video.mkv",
+                r"FileNotFoundError: Video /fsx-repligen/shared/datasets/uCO3D/dataset_export/(.*)/mask_video.mkv does not exist.",
+            ),
             ("stop iteration", r"raise StopIteration"),
             ("point cloud path None", r"ValueError: Point cloud path is None."),
-            ("depth maps path None", r"depth_h5_path = os.path.join(.*)argument must be str, bytes, or"),
-            ("mask video path None", r"fg_mask_np = self\._frame_from_video(.*)argument must be str, bytes, or"),
+            (
+                "depth maps path None",
+                r"depth_h5_path = os.path.join(.*)argument must be str, bytes, or",
+            ),
+            (
+                "mask video path None",
+                r"fg_mask_np = self\._frame_from_video(.*)argument must be str, bytes, or",
+            ),
         ):
             match = re.compile(pat).search(exc.replace("\n", ""))
             if match is not None:
@@ -235,9 +281,11 @@ def _analyze_logs(log_dir):
                 err_description_to_seqs[err_description].append(seq)
                 if "stop iteration" in err_description:
                     print(seq_to_idx[seq])
-                    import pdb; pdb.set_trace()
+                    import pdb
+
+                    pdb.set_trace()
                     pass
-                
+
                 if "missing gaussian splats meta.json" in err_description:
                     meta_file = exc.split()[-1][1:-1]
                     if "/".join(seq) not in meta_file:
@@ -249,25 +297,27 @@ def _analyze_logs(log_dir):
                     #     import pdb; pdb.set_trace()
                     #     pass
                     assert not os.path.isfile(meta_file)
-                    
+
                 if "missing segmented_point_cloud.py" in err_description:
                     pcl_file = str(match.groups()[1][3:])
                     assert not os.path.isfile(pcl_file)
-            
+
         if not any_match:
             print(exc)
             print(seq_to_idx[seq])
             print(seq)
-            import pdb; pdb.set_trace()
+            import pdb
+
+            pdb.set_trace()
             pass
-    
+
     print("\n\n\n\n----------\n\n\n\n")
     err_description_to_seqs = dict(err_description_to_seqs)
     for err_description, seqs in err_description_to_seqs.items():
         print(err_description)
         for seq in seqs:
             print("     " + "/".join(seq))
-    
+
     # for missing_segmented_pcl in missing_segmented_pcls:
     #     print(missing_segmented_pcl)
 
@@ -283,9 +333,11 @@ def _get_worker_checkpoint_file(log_dir, rank):
 
 def _store_worker_checkpoint(log_dir, rank, batch_idx):
     checkpoint_file = _get_worker_checkpoint_file(log_dir, rank)
-    print(f"Storing checkpoint for worker {rank} at batch {batch_idx}: {checkpoint_file}")
+    print(
+        f"Storing checkpoint for worker {rank} at batch {batch_idx}: {checkpoint_file}"
+    )
     with open(checkpoint_file, "w") as f:
-        f.write(f"{batch_idx}")    
+        f.write(f"{batch_idx}")
 
 
 def _load_worker_checkpoint(log_dir, rank):
@@ -293,7 +345,9 @@ def _load_worker_checkpoint(log_dir, rank):
     if os.path.exists(checkpoint_file):
         with open(checkpoint_file, "r") as f:
             batch_idx = int(f.read())
-        print(f"Loading checkpoint for worker {rank} at batch {batch_idx}: {checkpoint_file}")
+        print(
+            f"Loading checkpoint for worker {rank} at batch {batch_idx}: {checkpoint_file}"
+        )
         return batch_idx
     else:
         return None
@@ -310,7 +364,7 @@ if __name__ == "__main__":
     argparse.add_argument("--fast_check", action="store_true")
     args = argparse.parse_args()
 
-    if bool(args.analyze_logs):    
+    if bool(args.analyze_logs):
         _analyze_logs(str(args.log_dir))
         sys.exit(0)
 
@@ -320,7 +374,7 @@ if __name__ == "__main__":
     # [10577174, 10577175, 10577176, 10577177, 10577178, 10577179, 10577180, 10577181, 10577182, 10577183, 10577184, 10577185, 10577186, 10577187, 10577188, 10577189]
 
     if bool(args.run_locally):
-        
+
         world_size = int(args.world_size)
         if world_size <= 0:
             iterate_dataset_worker(
@@ -355,7 +409,7 @@ if __name__ == "__main__":
 
     else:
         from griddle.submitit_jobs import submitit_jobs
-        
+
         username = getpass.getuser()
         user_slurm_log_dir = f"/fsx-repligen/{username}/slurm_jobs_uco3d/"
         os.makedirs(user_slurm_log_dir, exist_ok=True)
@@ -380,7 +434,7 @@ if __name__ == "__main__":
             root_job_name=root_job_name,
             slurm_dir=user_slurm_log_dir,
             slurm_gpus_per_task=2,
-            slurm_cpus_per_gpu=int(args.num_workers)+1,
+            slurm_cpus_per_gpu=int(args.num_workers) + 1,
             slurm_ntasks_per_node=1,
             nodes=1,
             mem_per_cpu=16,
