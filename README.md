@@ -8,7 +8,7 @@
 
 This repository contains download scripts and tooling for working with the **UnCommon Objects in 3D (uCO3D)** dataset.
 
-**uCO3D** contains ~170,000 turn-tabe videos capturing objects from the LVIS taxonomy of object categories.
+**uCO3D** contains ~170,000 turn-table videos capturing objects from the LVIS taxonomy of object categories.
 
 The dataset is described in our paper ["UnCommon Objects in 3D"](TODO).
 
@@ -313,7 +313,7 @@ The folder `<UCO3D_DATASET_ROOT>/set_lists/` provides the following subset lists
 
 ### Creating custom subset lists
 
-Subset lists are stored as `sqlite` tables. The easiest way is to use `pandas` to select a subset of the main `<UCO3D_DATASET_ROOT>/metadata.sqlite` table. The following example makes a subset list from or 100 and 30 training and validation samples respectively, by taking the first 130 sequences:
+Subset lists are stored as `sqlite` tables. The easiest way is to use `pandas` to select a subset of the main `<UCO3D_DATASET_ROOT>/metadata.sqlite` table. The following example makes a subset list from or 100 and 30 training and validation samples respectively, by taking the first 130 sequences from the metadata:
 ```python
 import pandas as pd, sqlite3, os
 
@@ -324,7 +324,7 @@ frame_annots = pd.read_sql_table("frame_annots", f"sqlite:///{metadata_file}")
 # pick dataset sequence names by taking unique sequence names from frame annotations
 seqs = frame_annots["sequence_name"].unique()
 
-# choose the list of sequences
+# choose the list of train/val sequences
 train_seqs, val_seqs = downloaded_seqs[:100], downloaded_seqs[100:130]
 
 # training setlist
@@ -333,12 +333,13 @@ setlists_train["subset"] = "train"
 # validation setlist
 setlists_val = frame_annots[frame_annots.isin(val_seqs)][["frame_number","sequence_name"]]
 setlists_val["subset"] = "val"
+# concatenate train and val
+setlists = pd.concat([setlists_train, setlists_val])
 
 # the new setlists will be stored as the set_lists_130.sqlite file in the original root
 setlist_file = os.path.join(UCO3D_DATASET_ROOT, "set_lists", "set_lists_130.sqlite")
 # store the new table
 with sqlite3.connect(setlist_file) as con:
-    setlists = pd.concat([setlists_train, setlists_val])
     setlists.to_sql("set_lists", con, if_exists='replace', index=False)
 ```
 
