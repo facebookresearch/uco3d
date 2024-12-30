@@ -12,7 +12,7 @@ import time
 import urllib
 import warnings
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import (
     Any,
     ClassVar,
@@ -21,6 +21,7 @@ from typing import (
     Iterator,
     List,
     Optional,
+    Protocol,
     Sequence,
     Tuple,
     Type,
@@ -44,6 +45,103 @@ logger = logging.getLogger(__name__)
 
 
 _SET_LISTS_TABLE: str = "set_lists"
+
+
+class IndexProtocol(Protocol):
+    def __len__(self) -> int:
+        ...
+
+    def at(self, frame_idx: int) -> tuple[str, int]:
+        ...
+
+    def isin(self, sequence_name: str, frame_number: int) -> bool:
+        ...
+
+    def sequence_names(self) -> Iterable[str]:
+        ...
+
+    def get_sequence_indices(self, sequence_name: str) -> Sequence[int]:
+        ...
+
+    def get_frame_numbers_by_row_indices(
+        self,
+        idxs: Sequence[int],
+        seq_name: Optional[str] = None,
+        subset_filter: Union[Sequence[str], str, None] = None,
+    ) -> tuple[list[int], str, Sequence[int]]:
+        ...
+
+    def get_frame_type(self, sequence_name: str, frame_number: int) -> Optional[str]:
+        ...
+
+
+@dataclass
+class FullIndex(IndexProtocol):
+    df_index: pd.DataFrame
+
+    def __len__(self):
+        return len(self.df_index)
+
+    def at(self, frame_idx: int) -> tuple[str, int]:
+        if frame_idx >= len(self.df_index):
+            raise IndexError(f"index {frame_idx} out of range {len(self.df_index)}")
+
+        return self.df_index.index[frame_idx]
+
+    def isin(self, sequence_name: str, frame_number: int) -> bool:
+        return (sequence_name, frame_number) in self.df_index.index
+
+    def sequence_names(self) -> Iterable[str]:
+        """Returns an iterator over sequence names in the dataset."""
+        return self.df_index.index.unique("sequence_name")
+
+    def get_sequence_indices(self, sequence_name: str) -> Sequence[int]:
+        rows = self.df_index.index.get_loc(sequence_name)
+
+        if isinstance(rows, slice):
+            assert rows.stop is not None, "Unexpected result from pandas"
+            return range(rows.start or 0, rows.stop, rows.step or 1)
+        else:
+            return np.where(rows)[0]
+
+    def get_frame_numbers_by_row_indices(
+        self,
+        idxs: Sequence[int],
+        seq_name: Optional[str] = None,
+        subset_filter: Union[Sequence[str], str, None] = None,
+    ) -> tuple[list[int], str, Sequence[int]]:
+        """
+        Loads timestamps for given index rows belonging to the same sequence.
+        If seq_name is known, it speeds up the computation.
+        Raises ValueError if `idxs` do not all belong to a single sequences .
+        """
+        index_slice = self.df_index.iloc[idxs]
+        if subset_filter is not None:
+            if isinstance(subset_filter, str):
+                subset_filter = [subset_filter]
+            indicator = index_slice["subset"].isin(subset_filter)
+            index_slice = index_slice.loc[indicator]
+            idxs = [i for i, isin in zip(idxs, indicator) if isin]
+
+        frames = index_slice.index.get_level_values("frame_number").tolist()
+        # TODO: maybe not pass seq_name here?
+        if seq_name is None:
+            seq_name_list = index_slice.index.get_level_values("sequence_name").tolist()
+            seq_name_set = set(seq_name_list)
+            if len(seq_name_set) > 1:
+                raise ValueError("Given indices belong to more than one sequence.")
+            elif len(seq_name_set) == 1:
+                seq_name = seq_name_list[0]
+
+        return frames, seq_name, idxs
+
+    def get_frame_type(self, sequence_name: str, frame_number: int) -> Optional[str]:
+        if not (sequence_name, frame_number) in self.df_index.index:
+            return None
+
+        return self.df_index.loc[(sequence_name, frame_number), "subset"]
+
+
 
 
 @dataclass
@@ -131,8 +229,12 @@ class UCO3DDataset:
     remove_empty_masks_poll_whole_table_threshold: int = 300_000
     preload_metadata: bool = False
     store_sql_engine: bool = False
-    # we set it manually in the constructor
-    # _index: pd.DataFrame = field(init=False)
+
+    # we construct the rest manually in the constructor
+    # TODO: Generalise to ShortIndex
+    _index: FullIndex = field(init=False)
+    _sql_engine_stored: Optional[sa.engine.Engine] = field(init=False)
+    eval_batches: Optional[List[Any]] = field(init=False)
 
     def __post_init__(self) -> None:
         if sa.__version__ < "2.0":
@@ -208,7 +310,7 @@ class UCO3DDataset:
         if len(index) == 0:
             raise ValueError(f"There are no frames in the subsets: {self.subsets}!")
 
-        self._index = index.set_index(["sequence_name", "frame_number"])  # pyre-ignore
+        self._index = FullIndex(index.set_index(["sequence_name", "frame_number"]))  # pyre-ignore
 
         self.eval_batches = None  # pyre-ignore
         if self.eval_batches_file:
@@ -299,17 +401,14 @@ class UCO3DDataset:
             )
 
         if isinstance(frame_idx, int):
-            if frame_idx >= len(self._index):
-                raise IndexError(f"index {frame_idx} out of range {len(self._index)}")
-
-            seq, frame = self._index.index[frame_idx]
+            seq, frame = self._index.at(frame_idx)
         elif isinstance(frame_idx, (tuple, list)):
             seq, frame, *_ = frame_idx
 
             if isinstance(frame, torch.LongTensor):
                 frame = frame.item()
 
-            if (seq, frame) not in self._index.index:
+            if not self._index.isin(seq, frame):
                 raise IndexError(
                     f"Sequence-frame index {frame_idx} not found; is it filtered out?"
                 )
@@ -381,8 +480,12 @@ class UCO3DDataset:
 
     def frame_annotations(self) -> List[UCO3DFrameAnnotation]:
         """
-        Returns a a list of UCO3DFrameAnnotation objects with all frame annotations.
+        Returns a a list of UCO3DFrameAnnotation objects that pass the filters
+        with all frame annotations.
         """
+        # TODO: figure out how to optimise it
+        raise NotImplementedError()
+        # TODO: not currently supported; fix after refactoring
         frame_indices = set(self._index.index.values.tolist())
         with sa.orm.Session(self._sql_engine) as session:
             return (
@@ -396,9 +499,10 @@ class UCO3DDataset:
                 .all()
             )
 
+    # TODO: we may want to deprecate it
     def frame_annotations_dataframe(self) -> pd.DataFrame:
         """
-        Returns a DataFrame with all frame annotations.
+        Returns a DataFrame with all frame annotations (regardless of input filters).
         It can use a lot of memory, so use sparingly.
         """
         stmt = sa.select(self.frame_annotations_type)
@@ -407,13 +511,14 @@ class UCO3DDataset:
 
     def sequence_names(self) -> Iterable[str]:
         """Returns an iterator over sequence names in the dataset."""
-        return self._index.index.unique("sequence_name")
+        return self._index.sequence_names()
 
     def category_to_sequence_names(self) -> Dict[str, List[str]]:
         """
         Yields a dict mapping from each dataset category to a list of its
         sequence names.
         """
+        # TODO: index may support it more efficiently
         stmt = sa.select(
             UCO3DSequenceAnnotation.category, UCO3DSequenceAnnotation.sequence_name
         ).where(  # we limit results to sequences that have frames after all filters
@@ -485,12 +590,7 @@ class UCO3DDataset:
         """
         # TODO: implement sort_timestamp_first? (which would matter if the orders
         # of frame numbers and timestamps are different)
-        rows = self._index.index.get_loc(seq_name)
-        if isinstance(rows, slice):
-            assert rows.stop is not None, "Unexpected result from pandas"
-            rows = range(rows.start or 0, rows.stop, rows.step or 1)
-        else:
-            rows = np.where(rows)[0]
+        rows = self._index.get_sequence_indices(seq_name)
 
         index_slice, idx = self._get_frame_no_coalesced_ts_by_row_indices(
             rows, seq_name, subset_filter
@@ -855,7 +955,8 @@ class UCO3DDataset:
         return index
 
     def _get_frame_type(self, entry: UCO3DFrameAnnotation) -> Optional[str]:
-        return self._index.loc[(entry.sequence_name, entry.frame_number), "subset"]
+        # TODO: check isin!
+        return self._index.get_frame_type(entry.sequence_name, entry.frame_number)
 
     def _get_frame_no_coalesced_ts_by_row_indices(
         self,
@@ -868,22 +969,10 @@ class UCO3DDataset:
         If seq_name is known, it speeds up the computation.
         Raises ValueError if `idxs` do not all belong to a single sequences .
         """
-        index_slice = self._index.iloc[idxs]
-        if subset_filter is not None:
-            if isinstance(subset_filter, str):
-                subset_filter = [subset_filter]
-            indicator = index_slice["subset"].isin(subset_filter)
-            index_slice = index_slice.loc[indicator]
-            idxs = [i for i, isin in zip(idxs, indicator) if isin]
 
-        frames = index_slice.index.get_level_values("frame_number").tolist()
-        if seq_name is None:
-            seq_name_list = index_slice.index.get_level_values("sequence_name").tolist()
-            seq_name_set = set(seq_name_list)
-            if len(seq_name_set) > 1:
-                raise ValueError("Given indices belong to more than one sequence.")
-            elif len(seq_name_set) == 1:
-                seq_name = seq_name_list[0]
+        frames, seq_name, idxs = self._index.get_frame_numbers_by_row_indices(
+            idxs, seq_name, subset_filter
+        )
 
         coalesced_ts = sa.sql.functions.coalesce(
             self.frame_annotations_type.frame_timestamp, 0
@@ -899,7 +988,7 @@ class UCO3DDataset:
         with self._sql_engine.connect() as connection:
             frame_no_ts = pd.read_sql_query(stmt, connection)
 
-        if len(frame_no_ts) != len(index_slice):
+        if len(frame_no_ts) != len(frames):
             raise ValueError(
                 "Not all indices are found in the database; "
                 "do they belong to more than one sequence?"
