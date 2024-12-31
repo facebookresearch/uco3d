@@ -147,6 +147,7 @@ class FullIndex(IndexProtocol):
 @dataclass
 class SequenceLengthIndex(IndexProtocol):
     df_index: pd.DataFrame
+    subsets: list[str] | None = None
     _single_subset_per_sequence: bool = field(init=False)
 
     def __post_init__(self) -> None:
@@ -154,7 +155,16 @@ class SequenceLengthIndex(IndexProtocol):
         self._single_subset_per_sequence = (
             self.df_index.index.get_level_values("sequence_name").value_counts() == 1
         ).all()
-        # the firs index that belongs to the next sequence;
+
+        subsets = self.subsets
+        if self.subsets is not None:
+            assert self._single_subset_per_sequence, "TODO: support heterogeneous sequences"
+            # otherwise we need to be loading the full set_lists, at least on demand
+            # TODO: maybe store which sequences were heterogeneous before filtering?
+
+            self.df_index = self.df_index.loc[pd.IndexSlice[:, subsets], :]
+
+        # the first index that belongs to the succeeding sequence;
         # in other words, sequence frames are in [end_idx — num_frames, end_idx)
         self.df_index["end_idx"] = self.df_index["num_frames"].cumsum()
 
@@ -775,6 +785,7 @@ class UCO3DDataset:
             )
 
         if self.limit_sequences_to > 0:
+            # NOTE: we do not check if those sequences have subset frames
             logger.info(
                 f"Limiting dataset to first {self.limit_sequences_to} sequences"
             )
@@ -1058,13 +1069,11 @@ class UCO3DDataset:
             *self._get_exclude_filters(table.c),
         ]
 
-        # TODO: this is not correct. The order of frames will be scrambled. Need to load the full index?
-        subsets = self.subsets
-        if subsets is not None:
-            where_conditions.append(table.c.subset.in_(subsets))
-
         def add_where(stmt):
             return stmt.where(*where_conditions) if where_conditions else stmt
+
+        # NOTE we do not filter for subsets here as we may need all sequence’s
+        # subsets in the Index to compute frame-number offsets
 
         if self.limit_sequences_per_category_to <= 0:
             stmt = add_where(sa.select(table))
@@ -1083,9 +1092,7 @@ class UCO3DDataset:
             )
 
         if self.limit_sequences_to > 0:
-            if subsets is None or len(subsets) != 1:
-                raise ValueError("Use full index!")
-
+            # NOTE: we do not check if those sequences have subset frames
             logger.info(
                 f"Limiting dataset to first {self.limit_sequences_to} sequences"
             )
