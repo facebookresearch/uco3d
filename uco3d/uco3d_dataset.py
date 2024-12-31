@@ -150,7 +150,6 @@ class SequenceLengthIndex(IndexProtocol):
     _single_subset_per_sequence: bool = field(init=False)
 
     def __post_init__(self) -> None:
-        # TODO: we may need to check if it is 1:1 mapping to subset
         self.df_index = self.df_index.set_index(["sequence_name", "subset"])
         self._single_subset_per_sequence = (
             self.df_index.index.get_level_values("sequence_name").value_counts() == 1
@@ -238,7 +237,7 @@ class SequenceLengthIndex(IndexProtocol):
 
         num_frames = row.iloc[0]["num_frames"]
         start_idx = row.iloc[0]["end_idx"] - num_frames
-        frame_numbers = [idx - start_idx for idx in idxs]
+        frame_numbers = [idx - int(start_idx) for idx in idxs]  # cast from np.int64
         if not all(0 <= frame_number < num_frames for frame_number in frame_numbers):
             raise ValueError("Given indices belong to more than one sequence.")
 
@@ -408,111 +407,6 @@ class UCO3DDataset:
             self.eval_batches = self._load_filter_eval_batches()
 
         logger.info(str(self))
-
-    def _build_full_index(self) -> FullIndex:
-        sequences = self._get_filtered_sequences_if_any()
-
-        if self.subsets:
-            if self.subset_lists_file is None:
-                raise ValueError(
-                    "`subsets` is set but `subset_lists_file` is not set. "
-                    + "Either provide the self.subset_lists_file to load, or "
-                    + "set self.subsets=None."
-                )
-            index = self._build_index_from_subset_lists(sequences)
-        else:
-            if self.subset_lists_file is not None:
-                raise ValueError(
-                    "`subset_lists_file` is set but `subsets` is not set. "
-                    + "Either provide the self.subsets to load, or "
-                    + "set self.subset_lists_file=None."
-                )
-            # TODO: if self.subset_lists_file and not self.subsets, it might be faster to
-            # still use the concatenated lists, assuming they cover the whole dataset
-            warnings.warn(
-                "Detected self.subsets is None and self.subset_lists_file is None."
-                + " This will load the whole uCO3D database which takes a long time."
-                + " If possible, consider setting `subsets`, and defining a "
-                + " `subset_lists_file` to speed up the loading process."
-            )
-            index = self._build_index_from_db(sequences)
-
-        if self.n_frames_per_sequence >= 0:
-            index = self._stratified_sample_index(index)
-
-        if len(index) == 0:
-            raise ValueError(f"There are no frames in the subsets: {self.subsets}!")
-
-        return FullIndex(index.set_index(["sequence_name", "frame_number"]))  # pyre-ignore
-
-    def _build_sequence_lengths_index(self) -> SequenceLengthIndex:
-        if not self.subset_lists_file:
-            raise ValueError("Requested subsets but subset_lists_file not given")
-        if not os.path.exists(self.subset_lists_file):  # TODO: path manager
-            raise FileNotFoundError(
-                f"subset_lists_file {self.subset_lists_file} not found"
-            )
-
-        logger.info(f"Loading subset lists from {self.subset_lists_file}.")
-
-        subset_lists_path = self._local_path(self.subset_lists_file)
-
-        # we need a new engine since we store the subsets in a separate DB
-        sanitised_path = urllib.parse.quote(subset_lists_path)
-        engine = sa.create_engine(f"sqlite:///file:{sanitised_path}?mode=ro&uri=true")
-        table = sa.Table(_SEQUENCE_LENGTHS_TABLE, sa.MetaData(), autoload_with=engine)
-        # TODO: inspect the DB for the presence of table; fall back to full index if not
-
-        # maximum possible filter (if limit_sequences_per_category_to == 0):
-        # WHERE category IN 'self.pick_categories'
-        # AND sequence_name IN 'self.pick_sequences'
-        # AND sequence_name NOT IN 'self.exclude_sequences'
-        # LIMIT 'self.limit_sequence_to'
-
-        where_conditions = [
-            *self._get_category_filters(table.c),
-            *self._get_pick_filters(table.c),
-            *self._get_exclude_filters(table.c),
-        ]
-
-        subsets = self.subsets
-        if subsets is not None:
-            where_conditions.append(table.c.subset.in_(subsets))
-
-        def add_where(stmt):
-            return stmt.where(*where_conditions) if where_conditions else stmt
-
-        if self.limit_sequences_per_category_to <= 0:
-            stmt = add_where(sa.select(table))
-        else:
-            subquery = sa.select(
-                table,
-                sa.func.row_number()
-                # NOTE: ROWID is SQLite-specific
-                .over(order_by=sa.text("ROWID"), partition_by=table.c.category)
-                .label("row_number"),
-            )
-
-            subquery = add_where(subquery).subquery()
-            stmt = sa.select(table).where(
-                subquery.c.row_number <= self.limit_sequences_per_category_to
-            )
-
-        if self.limit_sequences_to > 0:
-            if subsets is None or len(subsets) != 1:
-                raise ValueError("Use full index!")
-
-            logger.info(
-                f"Limiting dataset to first {self.limit_sequences_to} sequences"
-            )
-            # NOTE: ROWID is SQLite-specific
-            stmt = stmt.order_by(sa.text("ROWID")).limit(self.limit_sequences_to)
-
-
-        with engine.connect() as connection:
-            index = pd.read_sql(stmt, connection)
-
-        return SequenceLengthIndex(index.reset_index())
 
     def __len__(self) -> int:
         # pyre-ignore[16]
@@ -1098,6 +992,112 @@ class UCO3DDataset:
         logger.info(f"  -> loaded {len(index)} samples.")
         return index
 
+    def _build_full_index(self) -> FullIndex:
+        sequences = self._get_filtered_sequences_if_any()
+
+        if self.subsets:
+            if self.subset_lists_file is None:
+                raise ValueError(
+                    "`subsets` is set but `subset_lists_file` is not set. "
+                    + "Either provide the self.subset_lists_file to load, or "
+                    + "set self.subsets=None."
+                )
+            index = self._build_index_from_subset_lists(sequences)
+        else:
+            if self.subset_lists_file is not None:
+                raise ValueError(
+                    "`subset_lists_file` is set but `subsets` is not set. "
+                    + "Either provide the self.subsets to load, or "
+                    + "set self.subset_lists_file=None."
+                )
+            # TODO: if self.subset_lists_file and not self.subsets, it might be faster to
+            # still use the concatenated lists, assuming they cover the whole dataset
+            warnings.warn(
+                "Detected self.subsets is None and self.subset_lists_file is None."
+                + " This will load the whole uCO3D database which takes a long time."
+                + " If possible, consider setting `subsets`, and defining a "
+                + " `subset_lists_file` to speed up the loading process."
+            )
+            index = self._build_index_from_db(sequences)
+
+        if self.n_frames_per_sequence >= 0:
+            index = self._stratified_sample_index(index)
+
+        if len(index) == 0:
+            raise ValueError(f"There are no frames in the subsets: {self.subsets}!")
+
+        return FullIndex(index.set_index(["sequence_name", "frame_number"]))  # pyre-ignore
+
+    def _build_sequence_lengths_index(self) -> SequenceLengthIndex:
+        if not self.subset_lists_file:
+            raise ValueError("Requested subsets but subset_lists_file not given")
+        if not os.path.exists(self.subset_lists_file):  # TODO: path manager
+            raise FileNotFoundError(
+                f"subset_lists_file {self.subset_lists_file} not found"
+            )
+
+        logger.info(f"Loading subset lists from {self.subset_lists_file}.")
+
+        subset_lists_path = self._local_path(self.subset_lists_file)
+
+        # we need a new engine since we store the subsets in a separate DB
+        sanitised_path = urllib.parse.quote(subset_lists_path)
+        engine = sa.create_engine(f"sqlite:///file:{sanitised_path}?mode=ro&uri=true")
+        table = sa.Table(_SEQUENCE_LENGTHS_TABLE, sa.MetaData(), autoload_with=engine)
+        # TODO: inspect the DB for the presence of table; fall back to full index if not
+
+        # maximum possible filter (if limit_sequences_per_category_to == 0):
+        # WHERE category IN 'self.pick_categories'
+        # AND sequence_name IN 'self.pick_sequences'
+        # AND sequence_name NOT IN 'self.exclude_sequences'
+        # LIMIT 'self.limit_sequence_to'
+
+        where_conditions = [
+            *self._get_category_filters(table.c),
+            *self._get_pick_filters(table.c),
+            *self._get_exclude_filters(table.c),
+        ]
+
+        # TODO: this is not correct. The order of frames will be scrambled. Need to load the full index?
+        subsets = self.subsets
+        if subsets is not None:
+            where_conditions.append(table.c.subset.in_(subsets))
+
+        def add_where(stmt):
+            return stmt.where(*where_conditions) if where_conditions else stmt
+
+        if self.limit_sequences_per_category_to <= 0:
+            stmt = add_where(sa.select(table))
+        else:
+            subquery = sa.select(
+                table,
+                sa.func.row_number()
+                # NOTE: ROWID is SQLite-specific
+                .over(order_by=sa.text("ROWID"), partition_by=table.c.category)
+                .label("row_number"),
+            )
+
+            subquery = add_where(subquery).subquery()
+            stmt = sa.select(table).where(
+                subquery.c.row_number <= self.limit_sequences_per_category_to
+            )
+
+        if self.limit_sequences_to > 0:
+            if subsets is None or len(subsets) != 1:
+                raise ValueError("Use full index!")
+
+            logger.info(
+                f"Limiting dataset to first {self.limit_sequences_to} sequences"
+            )
+            # NOTE: ROWID is SQLite-specific
+            stmt = stmt.order_by(sa.text("ROWID")).limit(self.limit_sequences_to)
+
+
+        with engine.connect() as connection:
+            index = pd.read_sql(stmt, connection)
+
+        return SequenceLengthIndex(index.reset_index())
+
     def _sort_index_(self, index):
         logger.info("Sorting the index by sequence and frame number.")
         index.sort_values(["sequence_name", "frame_number"], inplace=True)
@@ -1194,7 +1194,6 @@ class UCO3DDataset:
         with self._sql_engine.connect() as connection:
             frame_no_ts = pd.read_sql_query(stmt, connection)
 
-        print(stmt)
         if len(frame_no_ts) != len(frames):
             raise ValueError(
                 "Not all indices are found in the database; "
