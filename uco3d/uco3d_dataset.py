@@ -75,6 +75,9 @@ class IndexProtocol(Protocol):
     def get_frame_type(self, sequence_name: str, frame_number: int) -> Optional[str]:
         ...
 
+    def get_all_sequences_frame_numbers(self) -> list[tuple[str, int]]:
+        ...
+
 
 @dataclass
 class FullIndex(IndexProtocol):
@@ -126,7 +129,7 @@ class FullIndex(IndexProtocol):
             idxs = [i for i, isin in zip(idxs, indicator) if isin]
 
         frames = index_slice.index.get_level_values("frame_number").tolist()
-        # TODO: maybe not pass seq_name here?
+
         if seq_name is None:
             seq_name_list = index_slice.index.get_level_values("sequence_name").tolist()
             seq_name_set = set(seq_name_list)
@@ -143,6 +146,9 @@ class FullIndex(IndexProtocol):
 
         return self.df_index.loc[(sequence_name, frame_number), "subset"]
 
+    def get_all_sequences_frame_numbers(self) -> list[tuple[str, int]]:
+        return self.df_index.index.values.tolist()
+
 
 @dataclass
 class SequenceLengthIndex(IndexProtocol):
@@ -157,7 +163,7 @@ class SequenceLengthIndex(IndexProtocol):
         ).all()
 
         subsets = self.subsets
-        if self.subsets is not None:
+        if subsets is not None:
             assert self._single_subset_per_sequence, "TODO: support heterogeneous sequences"
             # otherwise we need to be loading the full set_lists, at least on demand
             # TODO: maybe store which sequences were heterogeneous before filtering?
@@ -195,7 +201,7 @@ class SequenceLengthIndex(IndexProtocol):
 
         try:
             # Use loc to access the rows for the given sequence_name
-            return frame_number < self.df_index.loc[sequence_name, "num_frames"]
+            return frame_number < self.df_index.loc[sequence_name].iloc[0]["num_frames"]
         except KeyError:
             # Handle the case where the sequence_name is not present
             return False
@@ -267,6 +273,14 @@ class SequenceLengthIndex(IndexProtocol):
             return subsets[0]
         except KeyError:
             return None
+
+    def get_all_sequences_frame_numbers(self) -> list[tuple[str, int]]:
+        subsets = self.subsets
+        return sum([
+            list(zip([index[0]] * row["num_frames"], range(row["num_frames"])))
+            for index, row in self.df_index.iterrows()
+            if subsets is None or index[1] in subsets
+        ], [])
 
 
 @dataclass
@@ -354,7 +368,7 @@ class UCO3DDataset:
     remove_empty_masks_poll_whole_table_threshold: int = 300_000
     preload_metadata: bool = False
     store_sql_engine: bool = False
-    use_sequence_lengths_index: bool = True  # TODO
+    use_sequence_lengths_index: bool = True
 
     # we construct the rest manually in the constructor
     _index: IndexProtocol = field(init=False)
@@ -373,7 +387,7 @@ class UCO3DDataset:
                 get_dataset_root() if self.dataset_root is None else self.dataset_root
             )
             # Then we point to the default "metadata.sqlite" file in dataset_root.
-            if dataset_root is not None and os.path.exists(dataset_root):
+            if dataset_root is not None and self._exists(dataset_root):
                 self.sqlite_metadata_file = os.path.join(
                     dataset_root, "metadata.sqlite"
                 )
@@ -385,7 +399,7 @@ class UCO3DDataset:
                     " or pass dataset_root."
                 )
 
-        if not os.path.exists(self.sqlite_metadata_file):
+        if not self._exists(self.sqlite_metadata_file):
             raise FileNotFoundError(
                 f"sqlite_metadata_file {self.sqlite_metadata_file} not found"
             )
@@ -580,13 +594,12 @@ class UCO3DDataset:
 
     def frame_annotations(self) -> List[UCO3DFrameAnnotation]:
         """
-        Returns a a list of UCO3DFrameAnnotation objects that pass the filters
+        Returns a list of UCO3DFrameAnnotation objects that pass the filters
         with all frame annotations.
+        The order may be different than the dataset’s integral index.
         """
-        # TODO: figure out how to optimise it
-        raise NotImplementedError()
-        # TODO: not currently supported; fix after refactoring
-        frame_indices = set(self._index.index.values.tolist())
+
+        frame_indices = set(self._index.get_all_sequences_frame_numbers())
         with sa.orm.Session(self._sql_engine) as session:
             return (
                 session.query(self.frame_annotations_type)
@@ -869,7 +882,7 @@ class UCO3DDataset:
     ) -> pd.DataFrame:
         if not self.subset_lists_file:
             raise ValueError("Requested subsets but subset_lists_file not given")
-        if not os.path.exists(self.subset_lists_file):  # TODO: path manager
+        if not self._isfile(self.subset_lists_file):
             raise FileNotFoundError(
                 f"subset_lists_file {self.subset_lists_file} not found"
             )
@@ -909,7 +922,7 @@ class UCO3DDataset:
                 to_remove = [(seq, np.int64(fr)) for seq, fr in to_remove]
                 index.drop(to_remove, errors="ignore", inplace=True)
             else:
-                # APPROACH 3: load index into a temp table and join with annotations
+                # APPROACH 2: load index into a temp table and join with annotations
                 # dev load: 94 s / 23 s (3.1M / 500K)
                 pick_frames_criteria.append(
                     sa.or_(
@@ -1042,7 +1055,7 @@ class UCO3DDataset:
     def _build_sequence_lengths_index(self) -> SequenceLengthIndex:
         if not self.subset_lists_file:
             raise ValueError("Requested subsets but subset_lists_file not given")
-        if not os.path.exists(self.subset_lists_file):  # TODO: path manager
+        if not self._isfile(self.subset_lists_file):
             raise FileNotFoundError(
                 f"subset_lists_file {self.subset_lists_file} not found"
             )
@@ -1103,7 +1116,7 @@ class UCO3DDataset:
         with engine.connect() as connection:
             index = pd.read_sql(stmt, connection)
 
-        return SequenceLengthIndex(index.reset_index())
+        return SequenceLengthIndex(index.reset_index(), subsets=self.subsets)
 
     def _sort_index_(self, index):
         logger.info("Sorting the index by sequence and frame number.")
@@ -1114,9 +1127,7 @@ class UCO3DDataset:
         assert self.eval_batches_file
         logger.info(f"Loading eval batches from {self.eval_batches_file}")
 
-        if (
-            self.path_manager and not self.path_manager.isfile(self.eval_batches_file)
-        ) or (not self.path_manager and not os.path.isfile(self.eval_batches_file)):
+        if not self._isfile(self.eval_batches_file):
             # The batch indices file does not exist.
             raise FileNotFoundError(
                 f"Cannot find eval batches json file in {self.eval_batches_file}."
@@ -1168,7 +1179,6 @@ class UCO3DDataset:
         return index
 
     def _get_frame_type(self, entry: UCO3DFrameAnnotation) -> Optional[str]:
-        # TODO: check isin!
         return self._index.get_frame_type(entry.sequence_name, entry.frame_number)
 
     def _get_frame_no_coalesced_ts_by_row_indices(
@@ -1209,11 +1219,6 @@ class UCO3DDataset:
 
         return frame_no_ts, idxs
 
-    def _local_path(self, path: str) -> str:
-        if self.path_manager is None:
-            return path
-        return self.path_manager.get_local_path(path)
-
     def _get_temp_index_table_instance(self, table_name: str = "__index"):
         CachedTable = self.frame_annotations_type.metadata.tables.get(table_name)
         if CachedTable is not None:  # table definition is not idempotent
@@ -1228,6 +1233,21 @@ class UCO3DDataset:
             sa.Column("subset", sa.String),
             prefixes=["TEMP"],  # NOTE SQLite specific!
         )
+
+    def _local_path(self, path: str) -> str:
+        if self.path_manager is None:
+            return path
+        return self.path_manager.get_local_path(path)
+
+    def _isfile(self, path: str) -> str:
+        if self.path_manager is None:
+            return os.path.isfile(path)
+        return self.path_manager.isfile(path)
+
+    def _exists(self, path: str) -> str:
+        if self.path_manager is None:
+            return os.path.exists(path)
+        return self.path_manager.exists(path)
 
 
 def _seq_name_to_seed(seq_name) -> int:
