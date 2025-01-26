@@ -115,6 +115,8 @@ pointing to the root folder with the uCO3D dataset.
 3) Create the dataset object and fetch its data:
     ```python
     from uco3d import UCO3DDataset, UCO3DFrameDataBuilder
+    from uco3d.dataset_utils.utils import get_dataset_root
+    import os
     # Get the dataset root folder and check that
     # all required metadata files exist.
     dataset_root = get_dataset_root(assert_exists=True)
