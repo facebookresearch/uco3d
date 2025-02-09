@@ -12,7 +12,7 @@ import time
 import urllib
 import warnings
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import (
     Any,
     ClassVar,
@@ -21,6 +21,7 @@ from typing import (
     Iterator,
     List,
     Optional,
+    Protocol,
     Sequence,
     Tuple,
     Type,
@@ -44,6 +45,242 @@ logger = logging.getLogger(__name__)
 
 
 _SET_LISTS_TABLE: str = "set_lists"
+_SEQUENCE_LENGTHS_TABLE: str = "sequence_lengths"
+
+
+class IndexProtocol(Protocol):
+    def __len__(self) -> int:
+        ...
+
+    def at(self, frame_idx: int) -> tuple[str, int]:
+        ...
+
+    def isin(self, sequence_name: str, frame_number: int) -> bool:
+        ...
+
+    def sequence_names(self) -> Iterable[str]:
+        ...
+
+    def get_sequence_indices(self, sequence_name: str) -> Sequence[int]:
+        ...
+
+    def get_frame_numbers_by_row_indices(
+        self,
+        idxs: Sequence[int],
+        seq_name: Optional[str] = None,
+        subset_filter: Union[Sequence[str], str, None] = None,
+    ) -> tuple[list[int], str, Sequence[int]]:
+        ...
+
+    def get_frame_type(self, sequence_name: str, frame_number: int) -> Optional[str]:
+        ...
+
+    def get_all_sequences_frame_numbers(self) -> list[tuple[str, int]]:
+        ...
+
+
+@dataclass
+class FullIndex(IndexProtocol):
+    df_index: pd.DataFrame
+
+    def __len__(self):
+        return len(self.df_index)
+
+    def at(self, frame_idx: int) -> tuple[str, int]:
+        if frame_idx >= len(self.df_index):
+            raise IndexError(f"index {frame_idx} out of range {len(self.df_index)}")
+
+        return self.df_index.index[frame_idx]
+
+    def isin(self, sequence_name: str, frame_number: int) -> bool:
+        return (sequence_name, frame_number) in self.df_index.index
+
+    def sequence_names(self) -> Iterable[str]:
+        """Returns an iterator over sequence names in the dataset."""
+        return self.df_index.index.unique("sequence_name")
+
+    def get_sequence_indices(self, sequence_name: str) -> Sequence[int]:
+        rows = self.df_index.index.get_loc(sequence_name)
+
+        if isinstance(rows, slice):
+            assert rows.stop is not None, "Unexpected result from pandas"
+            return range(rows.start or 0, rows.stop, rows.step or 1)
+        else:
+            return list(np.where(rows)[0])
+
+    def get_frame_numbers_by_row_indices(
+        self,
+        idxs: Sequence[int],
+        seq_name: Optional[str] = None,
+        subset_filter: Union[Sequence[str], str, None] = None,
+    ) -> tuple[list[int], str, Sequence[int]]:
+        """
+        Retrieves frame numbers for given index rows belonging to the same sequence.
+        If seq_name is known, it speeds up the computation.
+        Optionally filters idxs to a subset.
+        Raises ValueError if `idxs` do not all belong to a single sequence.
+        """
+        index_slice = self.df_index.iloc[idxs]
+        if subset_filter is not None:
+            if isinstance(subset_filter, str):
+                subset_filter = [subset_filter]
+            indicator = index_slice["subset"].isin(subset_filter)
+            index_slice = index_slice.loc[indicator]
+            idxs = [i for i, isin in zip(idxs, indicator) if isin]
+
+        frames = index_slice.index.get_level_values("frame_number").tolist()
+
+        if seq_name is None:
+            seq_name_list = index_slice.index.get_level_values("sequence_name").tolist()
+            seq_name_set = set(seq_name_list)
+            if len(seq_name_set) > 1:
+                raise ValueError("Given indices belong to more than one sequence.")
+            elif len(seq_name_set) == 1:
+                seq_name = seq_name_list[0]
+
+        return frames, seq_name, idxs
+
+    def get_frame_type(self, sequence_name: str, frame_number: int) -> Optional[str]:
+        if not (sequence_name, frame_number) in self.df_index.index:
+            return None
+
+        return self.df_index.loc[(sequence_name, frame_number), "subset"]
+
+    def get_all_sequences_frame_numbers(self) -> list[tuple[str, int]]:
+        return self.df_index.index.values.tolist()
+
+
+@dataclass
+class SequenceLengthIndex(IndexProtocol):
+    df_index: pd.DataFrame
+    subsets: list[str] | None = None
+    _single_subset_per_sequence: bool = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.df_index = self.df_index.set_index(["sequence_name", "subset"])
+        self._single_subset_per_sequence = (
+            self.df_index.index.get_level_values("sequence_name").value_counts() == 1
+        ).all()
+
+        subsets = self.subsets
+        if subsets is not None:
+            assert self._single_subset_per_sequence, "TODO: support heterogeneous sequences"
+            # otherwise we need to be loading the full set_lists, at least on demand
+            # TODO: maybe store which sequences were heterogeneous before filtering?
+
+            self.df_index = self.df_index.loc[pd.IndexSlice[:, subsets], :]
+
+        # the first index that belongs to the succeeding sequence;
+        # in other words, sequence frames are in [end_idx — num_frames, end_idx)
+        self.df_index["end_idx"] = self.df_index["num_frames"].cumsum()
+
+    def __len__(self) -> int:
+        return self.df_index.iloc[-1]["end_idx"]
+
+    def at(self, frame_idx: int) -> tuple[str, int]:
+        length = self.df_index.iloc[-1]["end_idx"]
+        if frame_idx >= length:
+            raise IndexError(f"index {frame_idx} out of range {length}")
+
+        position = self.df_index["end_idx"].searchsorted(frame_idx, side="right")
+        assert position < len(self.df_index), "end_idx is corrupted"
+
+        assert self._single_subset_per_sequence, "TODO: support heterogeneous sequences"
+        # Otherwise we need to query potentially multiple rows by sequence_name
+
+        seq_name, _subset = self.df_index.index[position]
+        row = self.df_index.iloc[position]
+        start_idx = row["end_idx"] - row["num_frames"]
+        assert frame_idx >= start_idx, "end_idx is corrupted"
+
+        return seq_name, frame_idx - start_idx
+
+    def isin(self, sequence_name: str, frame_number: int) -> bool:
+        assert self._single_subset_per_sequence, "TODO: support heterogeneous sequences"
+        # Otherwise we need to query potentially multiple rows by sequence_name
+
+        try:
+            # Use loc to access the rows for the given sequence_name
+            return frame_number < self.df_index.loc[sequence_name].iloc[0]["num_frames"]
+        except KeyError:
+            # Handle the case where the sequence_name is not present
+            return False
+
+    def sequence_names(self) -> Iterable[str]:
+        return self.df_index.index.get_level_values("sequence_name").unique()
+
+    def get_sequence_indices(self, sequence_name: str) -> Sequence[int]:
+        assert self._single_subset_per_sequence, "TODO: support heterogeneous sequences"
+        # Otherwise we need to query potentially multiple rows by sequence_name
+
+        row = self.df_index.loc[sequence_name]
+        return range(row.iloc[0]["end_idx"] - row.iloc[0]["num_frames"], row.iloc[0]["end_idx"])
+
+    def get_frame_numbers_by_row_indices(
+        self,
+        idxs: Sequence[int],
+        seq_name: Optional[str] = None,
+        subset_filter: Union[Sequence[str], str, None] = None,
+    ) -> tuple[list[int], str, Sequence[int]]:
+        assert self._single_subset_per_sequence, "TODO: support heterogeneous sequences"
+        # Otherwise we need to query potentially multiple rows by sequence_name
+
+        if seq_name is None:
+            position_min = self.df_index["end_idx"].searchsorted(min(idxs), side="right")
+            assert position_min < len(self.df_index), "end_idx is corrupted"
+            position_max = self.df_index["end_idx"].searchsorted(max(idxs), side="right")
+            assert position_max < len(self.df_index), "end_idx is corrupted"
+
+            if position_min != position_max:
+                raise ValueError("Given indices belong to more than one sequence or subset.")
+
+            seq_name, subset = self.df_index.index[position_min]
+
+        row = self.df_index.loc[seq_name]
+
+        if subset_filter is not None:
+            if isinstance(subset_filter, str):
+                subset_filter = [subset_filter]
+
+            if seq_name is not None:  # subset is not yet retrieved
+                subsets = row.index.get_level_values("subset")
+                assert len(subsets) == 1  # because _single_subset_per_sequence
+                subset = subsets[0]
+
+            if subset not in subset_filter:
+                return [], seq_name, []
+            # otherwise all frames pass subset filter
+
+        num_frames = row.iloc[0]["num_frames"]
+        start_idx = row.iloc[0]["end_idx"] - num_frames
+        frame_numbers = [idx - int(start_idx) for idx in idxs]  # cast from np.int64
+        if not all(0 <= frame_number < num_frames for frame_number in frame_numbers):
+            raise ValueError("Given indices belong to more than one sequence.")
+
+        return frame_numbers, seq_name, idxs
+
+    def get_frame_type(self, sequence_name: str, frame_number: int) -> Optional[str]:
+        assert self._single_subset_per_sequence, "TODO: support heterogeneous sequences"
+        # Otherwise we need to query potentially multiple rows by sequence_name
+
+        try:
+            row = self.df_index.loc[sequence_name]
+            subsets = row.index.get_level_values("subset")
+            assert len(subsets) == 1  # because _single_subset_per_sequence
+            if frame_number >= row.iloc[0]["num_frames"]:
+                return None
+
+            return subsets[0]
+        except KeyError:
+            return None
+
+    def get_all_sequences_frame_numbers(self) -> list[tuple[str, int]]:
+        subsets = self.subsets
+        return sum([
+            list(zip([index[0]] * row["num_frames"], range(row["num_frames"])))
+            for index, row in self.df_index.iterrows()
+            if subsets is None or index[1] in subsets
+        ], [])
 
 
 @dataclass
@@ -131,8 +368,12 @@ class UCO3DDataset:
     remove_empty_masks_poll_whole_table_threshold: int = 300_000
     preload_metadata: bool = False
     store_sql_engine: bool = False
-    # we set it manually in the constructor
-    # _index: pd.DataFrame = field(init=False)
+    use_sequence_lengths_index: bool = True
+
+    # we construct the rest manually in the constructor
+    _index: IndexProtocol = field(init=False)
+    _sql_engine_stored: Optional[sa.engine.Engine] = field(init=False)
+    eval_batches: Optional[List[Any]] = field(init=False)
 
     def __post_init__(self) -> None:
         if sa.__version__ < "2.0":
@@ -146,7 +387,7 @@ class UCO3DDataset:
                 get_dataset_root() if self.dataset_root is None else self.dataset_root
             )
             # Then we point to the default "metadata.sqlite" file in dataset_root.
-            if dataset_root is not None and os.path.exists(dataset_root):
+            if dataset_root is not None and self._exists(dataset_root):
                 self.sqlite_metadata_file = os.path.join(
                     dataset_root, "metadata.sqlite"
                 )
@@ -158,7 +399,7 @@ class UCO3DDataset:
                     " or pass dataset_root."
                 )
 
-        if not os.path.exists(self.sqlite_metadata_file):
+        if not self._exists(self.sqlite_metadata_file):
             raise FileNotFoundError(
                 f"sqlite_metadata_file {self.sqlite_metadata_file} not found"
             )
@@ -175,40 +416,15 @@ class UCO3DDataset:
             assert self.store_sql_engine, "preload_metadata requires store_sql_engine"
             self._sql_engine_stored = self._preload_database(self._sql_engine)
 
-        sequences = self._get_filtered_sequences_if_any()
-
-        if self.subsets:
-            if self.subset_lists_file is None:
+        if self.use_sequence_lengths_index:
+            if self.remove_empty_masks or self.pick_frames_sql_clause:
                 raise ValueError(
-                    "`subsets` is set but `subset_lists_file` is not set. "
-                    + "Either provide the self.subset_lists_file to load, or "
-                    + "set self.subsets=None."
+                    "Cannot use these filters with use_sequence_lengths_index."
                 )
-            index = self._build_index_from_subset_lists(sequences)
+
+            self._index = self._build_sequence_lengths_index()
         else:
-            if self.subset_lists_file is not None:
-                raise ValueError(
-                    "`subset_lists_file` is set but `subsets` is not set. "
-                    + "Either provide the self.subsets to load, or "
-                    + "set self.subset_lists_file=None."
-                )
-            # TODO: if self.subset_lists_file and not self.subsets, it might be faster to
-            # still use the concatenated lists, assuming they cover the whole dataset
-            warnings.warn(
-                "Detected self.subsets is None and self.subset_lists_file is None."
-                + " This will load the whole uCO3D database which takes a long time."
-                + " If possible, consider setting `subsets`, and defining a "
-                + " `subset_lists_file` to speed up the loading process."
-            )
-            index = self._build_index_from_db(sequences)
-
-        if self.n_frames_per_sequence >= 0:
-            index = self._stratified_sample_index(index)
-
-        if len(index) == 0:
-            raise ValueError(f"There are no frames in the subsets: {self.subsets}!")
-
-        self._index = index.set_index(["sequence_name", "frame_number"])  # pyre-ignore
+            self._index = self._build_full_index()
 
         self.eval_batches = None  # pyre-ignore
         if self.eval_batches_file:
@@ -299,17 +515,14 @@ class UCO3DDataset:
             )
 
         if isinstance(frame_idx, int):
-            if frame_idx >= len(self._index):
-                raise IndexError(f"index {frame_idx} out of range {len(self._index)}")
-
-            seq, frame = self._index.index[frame_idx]
+            seq, frame = self._index.at(frame_idx)
         elif isinstance(frame_idx, (tuple, list)):
             seq, frame, *_ = frame_idx
 
             if isinstance(frame, torch.LongTensor):
                 frame = frame.item()
 
-            if (seq, frame) not in self._index.index:
+            if not self._index.isin(seq, frame):
                 raise IndexError(
                     f"Sequence-frame index {frame_idx} not found; is it filtered out?"
                 )
@@ -381,9 +594,12 @@ class UCO3DDataset:
 
     def frame_annotations(self) -> List[UCO3DFrameAnnotation]:
         """
-        Returns a a list of UCO3DFrameAnnotation objects with all frame annotations.
+        Returns a list of UCO3DFrameAnnotation objects that pass the filters
+        with all frame annotations.
+        The order may be different than the dataset’s integral index.
         """
-        frame_indices = set(self._index.index.values.tolist())
+
+        frame_indices = set(self._index.get_all_sequences_frame_numbers())
         with sa.orm.Session(self._sql_engine) as session:
             return (
                 session.query(self.frame_annotations_type)
@@ -396,9 +612,10 @@ class UCO3DDataset:
                 .all()
             )
 
+    # TODO: we may want to deprecate it
     def frame_annotations_dataframe(self) -> pd.DataFrame:
         """
-        Returns a DataFrame with all frame annotations.
+        Returns a DataFrame with all frame annotations (regardless of input filters).
         It can use a lot of memory, so use sparingly.
         """
         stmt = sa.select(self.frame_annotations_type)
@@ -407,13 +624,14 @@ class UCO3DDataset:
 
     def sequence_names(self) -> Iterable[str]:
         """Returns an iterator over sequence names in the dataset."""
-        return self._index.index.unique("sequence_name")
+        return self._index.sequence_names()
 
     def category_to_sequence_names(self) -> Dict[str, List[str]]:
         """
         Yields a dict mapping from each dataset category to a list of its
         sequence names.
         """
+        # TODO: index may support it more efficiently
         stmt = sa.select(
             UCO3DSequenceAnnotation.category, UCO3DSequenceAnnotation.sequence_name
         ).where(  # we limit results to sequences that have frames after all filters
@@ -485,12 +703,7 @@ class UCO3DDataset:
         """
         # TODO: implement sort_timestamp_first? (which would matter if the orders
         # of frame numbers and timestamps are different)
-        rows = self._index.index.get_loc(seq_name)
-        if isinstance(rows, slice):
-            assert rows.stop is not None, "Unexpected result from pandas"
-            rows = range(rows.start or 0, rows.stop, rows.step or 1)
-        else:
-            rows = np.where(rows)[0]
+        rows = self._index.get_sequence_indices(seq_name)
 
         index_slice, idx = self._get_frame_no_coalesced_ts_by_row_indices(
             rows, seq_name, subset_filter
@@ -585,6 +798,7 @@ class UCO3DDataset:
             )
 
         if self.limit_sequences_to > 0:
+            # NOTE: we do not check if those sequences have subset frames
             logger.info(
                 f"Limiting dataset to first {self.limit_sequences_to} sequences"
             )
@@ -605,26 +819,33 @@ class UCO3DDataset:
 
         return sequences
 
-    def _get_category_filters(self) -> List[sa.ColumnElement]:
+    def _get_category_filters(
+        self, table=UCO3DSequenceAnnotation
+    ) -> List[sa.ColumnElement]:
         if not self.pick_categories:
             return []
 
         logger.info(f"Limiting dataset to categories: {self.pick_categories}")
-        return [UCO3DSequenceAnnotation.category.in_(self.pick_categories)]
+        return [table.category.in_(self.pick_categories)]
 
-    def _get_pick_filters(self) -> List[sa.ColumnElement]:
+    def _get_pick_filters(
+        self, table=UCO3DSequenceAnnotation
+    ) -> List[sa.ColumnElement]:
         if not self.pick_sequences:
             return []
 
         logger.info(f"Limiting dataset to sequences: {self.pick_sequences}")
-        return [UCO3DSequenceAnnotation.sequence_name.in_(self.pick_sequences)]
+        return [table.sequence_name.in_(self.pick_sequences)]
 
-    def _get_exclude_filters(self) -> List[sa.ColumnOperators]:
+    def _get_exclude_filters(
+        self, table=UCO3DSequenceAnnotation
+    ) -> List[sa.ColumnOperators]:
         if not self.exclude_sequences:
             return []
 
         logger.info(f"Removing sequences from the dataset: {self.exclude_sequences}")
-        return [UCO3DSequenceAnnotation.sequence_name.notin_(self.exclude_sequences)]
+        return [table.sequence_name.notin_(self.exclude_sequences)]
+
 
     def _load_subsets_from_json(self, subset_lists_path: str) -> pd.DataFrame:
         assert self.subsets is not None
@@ -661,7 +882,7 @@ class UCO3DDataset:
     ) -> pd.DataFrame:
         if not self.subset_lists_file:
             raise ValueError("Requested subsets but subset_lists_file not given")
-        if not os.path.exists(self.subset_lists_file):
+        if not self._isfile(self.subset_lists_file):
             raise FileNotFoundError(
                 f"subset_lists_file {self.subset_lists_file} not found"
             )
@@ -701,7 +922,7 @@ class UCO3DDataset:
                 to_remove = [(seq, np.int64(fr)) for seq, fr in to_remove]
                 index.drop(to_remove, errors="ignore", inplace=True)
             else:
-                # APPROACH 3: load index into a temp table and join with annotations
+                # APPROACH 2: load index into a temp table and join with annotations
                 # dev load: 94 s / 23 s (3.1M / 500K)
                 pick_frames_criteria.append(
                     sa.or_(
@@ -795,6 +1016,108 @@ class UCO3DDataset:
         logger.info(f"  -> loaded {len(index)} samples.")
         return index
 
+    def _build_full_index(self) -> FullIndex:
+        sequences = self._get_filtered_sequences_if_any()
+
+        if self.subsets:
+            if self.subset_lists_file is None:
+                raise ValueError(
+                    "`subsets` is set but `subset_lists_file` is not set. "
+                    + "Either provide the self.subset_lists_file to load, or "
+                    + "set self.subsets=None."
+                )
+            index = self._build_index_from_subset_lists(sequences)
+        else:
+            if self.subset_lists_file is not None:
+                raise ValueError(
+                    "`subset_lists_file` is set but `subsets` is not set. "
+                    + "Either provide the self.subsets to load, or "
+                    + "set self.subset_lists_file=None."
+                )
+            # TODO: if self.subset_lists_file and not self.subsets, it might be faster to
+            # still use the concatenated lists, assuming they cover the whole dataset
+            warnings.warn(
+                "Detected self.subsets is None and self.subset_lists_file is None."
+                + " This will load the whole uCO3D database which takes a long time."
+                + " If possible, consider setting `subsets`, and defining a "
+                + " `subset_lists_file` to speed up the loading process."
+            )
+            index = self._build_index_from_db(sequences)
+
+        if self.n_frames_per_sequence >= 0:
+            index = self._stratified_sample_index(index)
+
+        if len(index) == 0:
+            raise ValueError(f"There are no frames in the subsets: {self.subsets}!")
+
+        return FullIndex(index.set_index(["sequence_name", "frame_number"]))  # pyre-ignore
+
+    def _build_sequence_lengths_index(self) -> SequenceLengthIndex:
+        if not self.subset_lists_file:
+            raise ValueError("Requested subsets but subset_lists_file not given")
+        if not self._isfile(self.subset_lists_file):
+            raise FileNotFoundError(
+                f"subset_lists_file {self.subset_lists_file} not found"
+            )
+
+        logger.info(f"Loading subset lists from {self.subset_lists_file}.")
+
+        subset_lists_path = self._local_path(self.subset_lists_file)
+
+        # we need a new engine since we store the subsets in a separate DB
+        sanitised_path = urllib.parse.quote(subset_lists_path)
+        engine = sa.create_engine(f"sqlite:///file:{sanitised_path}?mode=ro&uri=true")
+        table = sa.Table(_SEQUENCE_LENGTHS_TABLE, sa.MetaData(), autoload_with=engine)
+        # TODO: inspect the DB for the presence of table; fall back to full index if not
+
+        # maximum possible filter (if limit_sequences_per_category_to == 0):
+        # WHERE category IN 'self.pick_categories'
+        # AND sequence_name IN 'self.pick_sequences'
+        # AND sequence_name NOT IN 'self.exclude_sequences'
+        # LIMIT 'self.limit_sequence_to'
+
+        where_conditions = [
+            *self._get_category_filters(table.c),
+            *self._get_pick_filters(table.c),
+            *self._get_exclude_filters(table.c),
+        ]
+
+        def add_where(stmt):
+            return stmt.where(*where_conditions) if where_conditions else stmt
+
+        # NOTE we do not filter for subsets here as we may need all sequence’s
+        # subsets in the Index to compute frame-number offsets
+
+        if self.limit_sequences_per_category_to <= 0:
+            stmt = add_where(sa.select(table))
+        else:
+            subquery = sa.select(
+                table,
+                sa.func.row_number()
+                # NOTE: ROWID is SQLite-specific
+                .over(order_by=sa.text("ROWID"), partition_by=table.c.category)
+                .label("row_number"),
+            )
+
+            subquery = add_where(subquery).subquery()
+            stmt = sa.select(table).where(
+                subquery.c.row_number <= self.limit_sequences_per_category_to
+            )
+
+        if self.limit_sequences_to > 0:
+            # NOTE: we do not check if those sequences have subset frames
+            logger.info(
+                f"Limiting dataset to first {self.limit_sequences_to} sequences"
+            )
+            # NOTE: ROWID is SQLite-specific
+            stmt = stmt.order_by(sa.text("ROWID")).limit(self.limit_sequences_to)
+
+
+        with engine.connect() as connection:
+            index = pd.read_sql(stmt, connection)
+
+        return SequenceLengthIndex(index.reset_index(), subsets=self.subsets)
+
     def _sort_index_(self, index):
         logger.info("Sorting the index by sequence and frame number.")
         index.sort_values(["sequence_name", "frame_number"], inplace=True)
@@ -804,14 +1127,15 @@ class UCO3DDataset:
         assert self.eval_batches_file
         logger.info(f"Loading eval batches from {self.eval_batches_file}")
 
-        if not os.path.isfile(self.eval_batches_file):
+        if not self._isfile(self.eval_batches_file):
             # The batch indices file does not exist.
             raise FileNotFoundError(
                 f"Cannot find eval batches json file in {self.eval_batches_file}."
                 + " Please specify a correct eval_batches_file"
             )
 
-        with open(self.eval_batches_file, "r") as f:
+        eval_batches_file = self._local_path(self.eval_batches_file)
+        with open(eval_batches_file, "r") as f:
             eval_batches = json.load(f)
 
         # limit the dataset to sequences to allow multiple evaluations in one file
@@ -855,7 +1179,7 @@ class UCO3DDataset:
         return index
 
     def _get_frame_type(self, entry: UCO3DFrameAnnotation) -> Optional[str]:
-        return self._index.loc[(entry.sequence_name, entry.frame_number), "subset"]
+        return self._index.get_frame_type(entry.sequence_name, entry.frame_number)
 
     def _get_frame_no_coalesced_ts_by_row_indices(
         self,
@@ -868,22 +1192,10 @@ class UCO3DDataset:
         If seq_name is known, it speeds up the computation.
         Raises ValueError if `idxs` do not all belong to a single sequences .
         """
-        index_slice = self._index.iloc[idxs]
-        if subset_filter is not None:
-            if isinstance(subset_filter, str):
-                subset_filter = [subset_filter]
-            indicator = index_slice["subset"].isin(subset_filter)
-            index_slice = index_slice.loc[indicator]
-            idxs = [i for i, isin in zip(idxs, indicator) if isin]
 
-        frames = index_slice.index.get_level_values("frame_number").tolist()
-        if seq_name is None:
-            seq_name_list = index_slice.index.get_level_values("sequence_name").tolist()
-            seq_name_set = set(seq_name_list)
-            if len(seq_name_set) > 1:
-                raise ValueError("Given indices belong to more than one sequence.")
-            elif len(seq_name_set) == 1:
-                seq_name = seq_name_list[0]
+        frames, seq_name, idxs = self._index.get_frame_numbers_by_row_indices(
+            idxs, seq_name, subset_filter
+        )
 
         coalesced_ts = sa.sql.functions.coalesce(
             self.frame_annotations_type.frame_timestamp, 0
@@ -899,18 +1211,13 @@ class UCO3DDataset:
         with self._sql_engine.connect() as connection:
             frame_no_ts = pd.read_sql_query(stmt, connection)
 
-        if len(frame_no_ts) != len(index_slice):
+        if len(frame_no_ts) != len(frames):
             raise ValueError(
                 "Not all indices are found in the database; "
                 "do they belong to more than one sequence?"
             )
 
         return frame_no_ts, idxs
-
-    def _local_path(self, path: str) -> str:
-        if self.path_manager is None:
-            return path
-        return self.path_manager.get_local_path(path)
 
     def _get_temp_index_table_instance(self, table_name: str = "__index"):
         CachedTable = self.frame_annotations_type.metadata.tables.get(table_name)
@@ -926,6 +1233,21 @@ class UCO3DDataset:
             sa.Column("subset", sa.String),
             prefixes=["TEMP"],  # NOTE SQLite specific!
         )
+
+    def _local_path(self, path: str) -> str:
+        if self.path_manager is None:
+            return path
+        return self.path_manager.get_local_path(path)
+
+    def _isfile(self, path: str) -> str:
+        if self.path_manager is None:
+            return os.path.isfile(path)
+        return self.path_manager.isfile(path)
+
+    def _exists(self, path: str) -> str:
+        if self.path_manager is None:
+            return os.path.exists(path)
+        return self.path_manager.exists(path)
 
 
 def _seq_name_to_seed(seq_name) -> int:
