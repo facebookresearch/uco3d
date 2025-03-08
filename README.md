@@ -16,6 +16,10 @@ The dataset is described in our paper ["UnCommon Objects in 3D"](https://arxiv.o
 <img src="./uco3d_grid.gif" width="600" alt="grid"/>
 </center>
 
+## Updates
+- Now the uCO3D dataset is also available on [hugging face](https://huggingface.co/datasets/facebook/uco3d)!
+
+
 ## Main features
 - **170,000 videos** scanning diverse objects from all directions.
 - Objects come from the LVIS taxonomy of **~1000 categories**, grouped into 50 super-categories.
