@@ -33,6 +33,30 @@ class TestDataloader(unittest.TestCase):
         for i in load_idx:
             _ = dataset[i]
 
+    def test_get_frame_annotations(self):
+        frames = self.dataset.frame_annotations()
+        self.assertEquals(len(frames), len(self.dataset))
+
+        load_idx = [random.randint(0, len(self.dataset)) for _ in range(10)]
+        for i in load_idx:
+            # check that our frame is in the dataset
+            self.dataset.meta[frames[i].sequence_name, frames[i].frame_number]
+
+    def test_get_filtered_frame_annotations(self):
+        dataset = get_all_load_dataset(dataset_kwargs={
+            "subsets": ["train"],
+            "pick_categories": ["apple"],
+        })
+
+        frames = dataset.frame_annotations()
+        self.assertEquals(len(dataset), 999)
+        self.assertEquals(len(frames), 999)
+
+        load_idx = [random.randint(0, len(dataset)) for _ in range(10)]
+        for i in load_idx:
+            # check that our frame is in the dataset
+            self.dataset.meta[frames[i].sequence_name, frames[i].frame_number]
+
     def test_iterate_dataloader(self):
         dataset = self.dataset
         dataloader = DataLoader(
